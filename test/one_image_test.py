@@ -1,6 +1,7 @@
 #coding:utf-8
 import sys
-sys.path.append('..')
+parent_path = sys.path[0].replace("/test", "", 1)
+sys.path.append(parent_path)
 from Detection.MtcnnDetector import MtcnnDetector
 from Detection.detector import Detector
 from Detection.fcn_detector import FcnDetector
@@ -47,11 +48,14 @@ gt_imdb = []
 path = "lala"
 for item in os.listdir(path):
     gt_imdb.append(os.path.join(path,item))
+    print(gt_imdb)
 test_data = TestLoader(gt_imdb)
 all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
 count = 0
+print(all_boxes)
+# imagepath = gt_imdb[0]
 for imagepath in gt_imdb:
-    print imagepath
+    print(imagepath)
     image = cv2.imread(imagepath)
     for bbox in all_boxes[count]:
         cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
@@ -64,16 +68,6 @@ for imagepath in gt_imdb:
     count = count + 1
     #cv2.imwrite("result_landmark/%d.png" %(count),image)
     cv2.imshow("lala",image)
-    cv2.waitKey(0)    
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break   
 
-'''
-for data in test_data:
-    print type(data)
-    for bbox in all_boxes[0]:
-        print bbox
-        print (int(bbox[0]),int(bbox[1]))
-        cv2.rectangle(data, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255))
-    #print data
-    cv2.imshow("lala",data)
-    cv2.waitKey(0)
-'''
