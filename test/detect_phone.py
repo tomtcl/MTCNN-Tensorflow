@@ -48,10 +48,13 @@ def main():
             image = np.array(frame)
             boxes_c,landmarks = mtcnn_detector.detect(image)
             
-            print landmarks.shape
+            print(landmarks.shape)
             t2 = cv2.getTickCount()
             t = (t2 - t1) / cv2.getTickFrequency()
             fps = 1.0 / t
+            
+            # BGR 图像转换为 YCrCb = [y, Cr, Cb] 包含三个分量的数组
+            yCrCb = BGR2YCrCb(image)
 
             #人脸区域
             for i in range(boxes_c.shape[0]):
@@ -85,18 +88,20 @@ def main():
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         else:
-            print 'device not find'
+            print('device not find')
             break
     video_capture.release()
     cv2.destroyAllWindows()
 
+#计算耳部区域
+#params  face_box: 脸部矩形区域，包含左上角点坐标和右下角点坐标
 def cal_ear_area_pt(face_box):
 	assert len(face_box) > 3, "face box len error"
 
 	#左上角坐标
 	face_left_up_pt = face_box[:2]
 
-	#右上角坐标
+	#右下角坐标
 	face_right_down_pt = face_box[2:4]
 
 	face_height = face_right_down_pt[1] - face_left_up_pt[1]
@@ -121,5 +126,30 @@ def cal_ear_area_pt(face_box):
 
 	return [ear_left_pt, ear_right_pt]
 
+def BGR2YCrCb(img_bgr):
+    img_ycrcb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2YCrCb)
+
+    return cv2.split(img_ycrcb)
+
+# # description: 检测肤色区域
+# # params: 
+# # img_ycrcb: YCrCb颜色空间图像  face_box: 脸部矩形区域，包含左上角点坐标和右下角点坐标  ear_boxs: 包含左右耳朵矩形区域
+# def detect_skin_area(img_ycrcb, face_box, ear_boxs):
+    
+#     y, cr, cb = img_ycrcb
+
+#     #左上角坐标
+# 	face_left_up_pt = face_box[:2]
+
+# 	#右下角坐标
+# 	face_right_down_pt = face_box[2:4]
+
+#     cr_face = cr[face_left_up_pt[0]:face_right_down_pt[0], face_left_up_pt[1], face_right_down_pt[1]]
+#     cb_face = cb[face_left_up_pt[0]:face_right_down_pt[0], face_left_up_pt[1], face_right_down_pt[1]]
+
+# # 计算脸部区域肤色信息期望值向量
+# def cal_expect_vetor(cr, cb):
+
+    
 if __name__ == "__main__":
     main()
