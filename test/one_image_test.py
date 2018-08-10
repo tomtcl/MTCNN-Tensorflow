@@ -50,14 +50,13 @@ def main():
     #imdb_ = dict()"
     #imdb_['image'] = im_path
     #imdb_['label'] = 5
-    path = "lala"
+    path = "tel"
     for item in os.listdir(path):
-        gt_imdb.append(os.path.join(path,item))
-        print(gt_imdb)
+        if item[0] != '.':
+            gt_imdb.append(os.path.join(path,item))
     test_data = TestLoader(gt_imdb)
     all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
     count = 0
-    print(all_boxes)
     # imagepath = gt_imdb[0]
     for imagepath in gt_imdb:
         print(imagepath)
