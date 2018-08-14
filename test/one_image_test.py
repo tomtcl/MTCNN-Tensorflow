@@ -103,6 +103,8 @@ def skinDetect(image, bbox, landmark):
     # TEST------
     face_single_gaussian_model(cbcr, cbcr_mean, cbcr_cov)
 
+    cbcr_cov = covariance_matrix(img_ycrcb, cbcr_mean)
+    
     single_gaussian_model(image, cbcr_mean, cbcr_cov)
 
 ##################################################
@@ -133,6 +135,45 @@ def covariance_matrix(cbcr):
     print("cbcr_cov:", cbcr_cov)
 
     return cbcr_cov
+##################################################
+# 采用numpy自带公式计算协方差矩阵
+##################################################
+# def covariance_matrix(img_ycrcb):
+#     y, cr, cb = cv2.split(img_ycrcb)
+
+#     crravel = cr.ravel()
+#     cbravel = cb.ravel()
+
+#     #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
+#     cbcr = np.vstack((crravel, cbravel))
+#     # print("cbcr:", cbcr)
+
+#     cbcr_cov = np.cov(cbcr)
+#     print("cbcr_cov:", cbcr_cov)
+
+##################################################
+# 自定义协方差计算
+##################################################
+def covariance_matrix(img_ycrcb, cbcr_mean):
+    y, cr, cb = cv2.split(img_ycrcb)
+
+    # 转换成一维数组
+    crravel = cr.ravel()
+    cbravel = cb.ravel()
+
+    #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
+    cbcr = np.column_stack((cbravel, crravel)) 
+    cov_sum = np.mat([0, 0])
+    for row in range(np.shape(cbcr)[0]):
+        xdiff = cbcr[row] - cbcr_mean
+        xdiff_mat = np.mat(xdiff)
+        cov_sum = cov_sum + np.dot(xdiff_mat.T, xdiff_mat)
+
+    # print("cov_sum:", cov_sum)
+    cbcr_cov = cov_sum / (np.shape(cbcr)[0] - 1)
+    print("cbcr_cov:",cbcr_cov)
+    
+    return np.mat(cbcr_cov)
 
 
 def single_gaussian_model(image, mean, cov):
@@ -163,7 +204,7 @@ def single_gaussian_model(image, mean, cov):
         if p >= 0.0018:
             imgravel[row] = 255
         else:
-            imgravel[row] = 0
+            imgravel[row] = 0 #非人脸部分填充黑色
 
     img_gray = imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])
 
