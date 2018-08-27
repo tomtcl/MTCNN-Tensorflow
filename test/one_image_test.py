@@ -1,6 +1,5 @@
 #coding:utf-8
 import sys
-import time
 parent_path = sys.path[0].replace("/test", "", 1)
 sys.path.append(parent_path)
 from Detection.MtcnnDetector import MtcnnDetector
@@ -11,14 +10,8 @@ from prepare_data.loader import TestLoader
 import cv2
 import os
 import numpy as np
-<<<<<<< HEAD
 import time
 import matplotlib.pyplot as plt
-=======
-import matplotlib.pyplot as plt
-import colorcorrect.algorithm as cca
-
->>>>>>> remove pyc files
 
 np.set_printoptions(threshold='nan') 
 
@@ -95,56 +88,46 @@ def skinDetect(image, bbox, landmark):
     #裁剪出脸部区域
     crop_image = image[int(bbox[1]): int(bbox[3]), int(bbox[0]): int(bbox[2])]
     
-    landmark = relative_position_landmark(bbox, landmark)
-
-    # test_show_landmark_area(crop_image, landmark)
-
+    #转换为YCrYCb颜色空间图片
     img_ycrcb = cv2.cvtColor(crop_image, cv2.COLOR_BGR2YCrCb)
+
+    #YCbCr 生成二维数组[[cb,cb,cb,cb,....], [cr,cr,cr,cr,cr,...]]
     cbcr = resize_image_shape(img_ycrcb)
 
-    #去除噪声
+    #调整五个特征点相对人脸的位置(之前是相对裁剪之前图片的位置)
+    landmark = landmark_relative(bbox, landmark)
+
+    #去除噪声(五官,内接圆外)
     cbcr = remove_noise(crop_image, landmark, cbcr)
 
+    #计算人脸区域期望值
     cbcr_mean = mean(cbcr)
 
+    #计算人脸区域协方差
     cbcr_cov = covariance_matrix(cbcr)
+
     # TEST------
     face_single_gaussian_model(cbcr, cbcr_mean, cbcr_cov)
-
-    #计算人脸区域协方差
-    cbcr_cov = covariance_matrix(img_ycrcb, cbcr_mean, landmark)
     
     #计算整张图片的单峰高斯概率密度pdf
-    single_gaussian_model(crop_image, cbcr_mean, cbcr_cov)
+    single_gaussian_model(image, cbcr_mean, cbcr_cov)
 
 ##################################################
 #采用mean公式计算均值
 ##################################################
 def mean(cbcr):
-    # y, cr, cb = cv2.split(img_ycrcb)
- 
-    # cr_mean = np.mean(cr)
-    # cb_mean = np.mean(cb)
-
-    # cbcr_mean = [cb_mean, cr_mean]
     cbcr_mean = np.mean(cbcr, axis=1)
     print("cbcr_mean:", cbcr_mean)
-
     return cbcr_mean
 
+##################################################
+# 采用cov公式计算协方差
+##################################################
 def covariance_matrix(cbcr):
-    # y, cr, cb = cv2.split(img_ycrcb)
-
-    # crravel = cr.ravel()
-    # cbravel = cb.ravel()
-
-    # cbcr = np.vstack((crravel, cbravel))
-    # print("cbcr:", cbcr)
-
     cbcr_cov = np.cov(cbcr)
     print("cbcr_cov:", cbcr_cov)
-
     return cbcr_cov
+
 ##################################################
 #自定义计算均值
 ##################################################
@@ -164,29 +147,6 @@ def covariance_matrix(cbcr):
 #     cost = time.time() - cost
 #     print("mean cost time:", cost)
 #     return cbcr_mean
-
-##################################################
-# 采用numpy自带公式计算协方差矩阵
-##################################################
-def covariance_matrix(img_ycrcb,cbcr_mean,landmark):
-    cost = time.time()
-    _, cr, cb = cv2.split(img_ycrcb)
-    
-    # 转换成一维数组
-    crravel = cr.ravel()
-    cbravel = cb.ravel()
-
-    #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
-    cbcr = np.vstack((crravel, cbravel))
-    # print("cbcr:", cbcr)
-
-    cbcr_cov = np.cov(cbcr)
-    print("cbcr_cov:", cbcr_cov)
-
-    cost = time.time() - cost
-    print("covariance_matrix cost time:", cost)
-
-    return cbcr_cov
 
 ##################################################
 # 自定义协方差计算
@@ -217,25 +177,20 @@ def single_gaussian_model(image, mean, cov):
     cost = time.time()
 
     img_ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
-    img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    # print("img_gray:", img_gray)
-   
-    # #Test......
-    # # mean = np.mat([123.651, 51.568])
-    # # cov = np.mat([[441.23,5.15], [5.15, 289.12]])
-
     _, cr, cb = cv2.split(img_ycrcb)
-
     crravel = cr.ravel()
     cbravel = cb.ravel()
+    # #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
+    cbcr = np.column_stack((cbravel, crravel)) 
+
+    # 用于生成二值图(调试显示)
+    img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     imgravel = img_gray.ravel()
 
     # #矩阵行列式 & 逆矩阵
     covdet = np.linalg.det(cov)
     covinv = np.linalg.inv(cov)
 
-    # #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
-    cbcr = np.column_stack((cbravel, crravel)) 
     pdfs = []
     for row in range(np.shape(cbcr)[0]):
         xdiff = cbcr[row] - mean
@@ -246,8 +201,8 @@ def single_gaussian_model(image, mean, cov):
         else:
             imgravel[row] = 0 #非人脸部分填充黑色
     #Test......
-    print("prox:",len(pdfs), "sum:", sum(pdfs))
-    test_show_hist(pdfs)
+    # print("prox:",len(pdfs), "sum:", sum(pdfs))
+    # test_show_hist(pdfs)
 
     img_gray = imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])
 
@@ -256,18 +211,6 @@ def single_gaussian_model(image, mean, cov):
 
     cv2.imshow("gray",img_gray)
     cv2.waitKey(0) & 0xFF == ord('q')
-
-    
-
-    # test_show_skin_piexl(np.array(proxs), np.array(proxs), 'b')
-    # img_open = open_operation(img_gray)
-    # cv2.imshow("open",img_open)
-    # cv2.waitKey(0) & 0xFF == ord('q')
-
-    # img_close = close_operation(img_open)
-    # cv2.imshow("close",img_close)
-    # cv2.waitKey(0) & 0xFF == ord('q')
-
 
 #计算特征点相对位置，因为需截取人脸位置，所以计算特征点相对人脸坐标的位置
 def landmark_relative(bbox,landmark):
@@ -298,52 +241,6 @@ def is_landmark_pixel(landmark, row, col):
 
     return False
 
-#Gray world 预处理
-def grey_world(image):
-    return  cca.grey_world(image)
-
-# 闭运算
-def close_operation(image):
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    img = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
-    return img
-
-# 开运算
-def open_operation(image):
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    img = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
-    return img
-
-
-#测试显示需要去除的特征点位置
-def test_show_remove_landmark_piexl(image, landmark):
-    eye_length = 22.0 #眼睛矩形边长
-    eye_width = 32.0
-    nose_width = 20.0
-    nose_height = 14.0
-    mouse_lenght = 20.0
-    for i in range(len(landmark)/2):
-        if i == 0 or i == 1:
-            cv2.rectangle(image, (int(landmark[2*i] - eye_width / 2),int(landmark[2*i+1] - eye_length / 2)),(int(landmark[2*i] + eye_width / 2),int(landmark[2*i+1] + eye_length / 2)),(0,0,255))
-        elif i == 2:
-            cv2.rectangle(image, (int(landmark[2*i] - nose_width / 2),int(landmark[2*i+1] - nose_height)),(int(landmark[2*i] + nose_width / 2),int(landmark[2*i+1] + 12)),(0,0,255))
-        else:
-            cv2.rectangle(image, (int(landmark[2*i]),int(landmark[2*i+1])),(int(landmark[2*(i+1)]),int(landmark[2*(i+1)+1] + mouse_lenght)),(0,0,255))
-            break
-
-
-# 测试显示肤色散列点
-def test_show_skin_piexl(x1, y1, color1):
- 
-    fig = plt.figure(figsize=(8,5))
-    plt.scatter(x1, y1, c = color1)
-
-
-    plt.xlim([60, 150])
-    plt.ylim([90, 180])
-    plt.show()
-
-<<<<<<< HEAD
 def face_single_gaussian_model(cbcr, mean, cov):
     #矩阵行列式 & 逆矩阵
     covdet = np.linalg.det(cov)
@@ -400,12 +297,6 @@ def is_outside_of_circle(point, circle, radius):
     distance = np.sqrt(np.square(x - rx) + np.square(y - ry)) 
     return distance > radius
 
-def relative_position_landmark(bbox, landmark):
-    for i in range(len(landmark)/2):
-        landmark[2*i] -= bbox[0] - 5
-        landmark[2*i+1] -= bbox[1] - 5
-    return landmark
-
 def is_landmark(point, landmark):
     eye_width = 30
     eye_height = 30
@@ -431,6 +322,22 @@ def is_landmark(point, landmark):
             break 
     return False
 
+#Gray world 预处理
+def grey_world(image):
+    return  cca.grey_world(image)
+
+# 闭运算
+def close_operation(image):
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    img = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
+    return img
+
+# 开运算
+def open_operation(image):
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    img = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
+    return img
+    
 #Test......
 def test_show_landmark_point(image, landmark):
     for i in range(len(landmark)/2):
@@ -467,12 +374,34 @@ def test_show_landmark_area(image, landmark):
 def test_show_gaussion_probability(probabilitys):
 
     plt.hist(probabilitys, bins=30)
-=======
-# 测试显示直方图
-def test_show_hist(x):
-    plt.figure("hist")
-    n, bins, patches = plt.hist(x)
->>>>>>> remove pyc files
+    plt.show()
+
+#测试显示需要去除的特征点位置
+def test_show_remove_landmark_piexl(image, landmark):
+    eye_length = 22.0 #眼睛矩形边长
+    eye_width = 32.0
+    nose_width = 20.0
+    nose_height = 14.0
+    mouse_lenght = 20.0
+    for i in range(len(landmark)/2):
+        if i == 0 or i == 1:
+            cv2.rectangle(image, (int(landmark[2*i] - eye_width / 2),int(landmark[2*i+1] - eye_length / 2)),(int(landmark[2*i] + eye_width / 2),int(landmark[2*i+1] + eye_length / 2)),(0,0,255))
+        elif i == 2:
+            cv2.rectangle(image, (int(landmark[2*i] - nose_width / 2),int(landmark[2*i+1] - nose_height)),(int(landmark[2*i] + nose_width / 2),int(landmark[2*i+1] + 12)),(0,0,255))
+        else:
+            cv2.rectangle(image, (int(landmark[2*i]),int(landmark[2*i+1])),(int(landmark[2*(i+1)]),int(landmark[2*(i+1)+1] + mouse_lenght)),(0,0,255))
+            break
+
+
+# 测试显示肤色散列点
+def test_show_skin_piexl(x1, y1, color1):
+ 
+    fig = plt.figure(figsize=(8,5))
+    plt.scatter(x1, y1, c = color1)
+
+
+    plt.xlim([60, 150])
+    plt.ylim([90, 180])
     plt.show()
 
 if __name__ == "__main__":
