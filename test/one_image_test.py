@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 
 np.set_printoptions(threshold='nan') 
 
+possibly = 0.0
+
 def main():
     
     test_mode = "ONet"
@@ -75,16 +77,18 @@ def main():
         skinDetect(image, all_boxes[count][0], landmarks[count][0])
 
         count = count + 1
-        # cv2.imwrite("%d.png" %(count),image)
-        # cv2.imshow("lala",image)
-        # if cv2.waitKey(0) & 0xFF == ord('q'):
-            # continue   
+        cv2.imwrite("%d.png" %(count),image)
+        cv2.imshow("lala",image)
+        if cv2.waitKey(0) & 0xFF == ord('q'):
+            continue  
+
 
 ##################################################
 #自适应肤色检测，根据面部肤色区域，计算均值 & 协方差矩阵
 #高斯模型概率密度分布
 ##################################################
 def skinDetect(image, bbox, landmark):
+    t1 = time.time()
     #裁剪出脸部区域
     crop_image = image[int(bbox[1]): int(bbox[3]), int(bbox[0]): int(bbox[2])]
     
@@ -98,7 +102,7 @@ def skinDetect(image, bbox, landmark):
     landmark = landmark_relative(bbox, landmark)
 
     #去除噪声(五官,内接圆外)
-    cbcr = remove_noise(crop_image, landmark, cbcr)
+    # cbcr = remove_noise(crop_image, landmark, cbcr)
 
     #计算人脸区域期望值
     cbcr_mean = mean(cbcr)
@@ -108,9 +112,13 @@ def skinDetect(image, bbox, landmark):
 
     # TEST------
     face_single_gaussian_model(cbcr, cbcr_mean, cbcr_cov)
+    print("skinDetect cost time:", time.time() - t1)
     
+    #获取感兴趣区域图像(face & ear)
+    roi_image = ROI(image, bbox)
+
     #计算整张图片的单峰高斯概率密度pdf
-    single_gaussian_model(image, cbcr_mean, cbcr_cov)
+    single_gaussian_model(roi_image, cbcr_mean, cbcr_cov)
 
 ##################################################
 #采用mean公式计算均值
@@ -127,51 +135,6 @@ def covariance_matrix(cbcr):
     cbcr_cov = np.cov(cbcr)
     print("cbcr_cov:", cbcr_cov)
     return cbcr_cov
-
-##################################################
-#自定义计算均值
-##################################################
-# def mean(img_ycrcb, landmark):
-#     cost = time.time()    
-#     cov_sum = np.mat([0.0, 0.0])
-#     landmark_pixel_sum = 0
-#     for row in range(np.shape(img_ycrcb)[0]):
-#         for col in range(np.shape(img_ycrcb)[1]):
-#             _, cr, cb = img_ycrcb[row][col]
-#             if is_landmark_pixel(landmark, row, col):
-#                 landmark_pixel_sum += 1
-#                 continue
-#             cov_sum = cov_sum + np.mat([cb, cr])
-#     cbcr_mean = cov_sum / ((np.shape(img_ycrcb)[0] * np.shape(img_ycrcb)[1]) - landmark_pixel_sum)
-#     print("cbcr_mean:", cbcr_mean)
-#     cost = time.time() - cost
-#     print("mean cost time:", cost)
-#     return cbcr_mean
-
-##################################################
-# 自定义协方差计算
-##################################################
-# def covariance_matrix(img_ycrcb, cbcr_mean,landmark):
-#     cost = time.time()
-#     cov_sum = np.mat([0.0, 0.0])
-#     landmark_pixel_sum = 0
-#     for row in range(np.shape(img_ycrcb)[0]):
-#         for col in range(np.shape(img_ycrcb)[1]):
-#             if is_landmark_pixel(landmark, row, col):
-#                 landmark_pixel_sum += 1
-#                 continue
-#             _, cr, cb = img_ycrcb[row][col]
-#             xdiff = np.mat([cb, cr]) - cbcr_mean
-#             cov_sum = cov_sum + np.dot(xdiff.T, xdiff)
-    
-#     cbcr_cov = cov_sum / (np.shape(img_ycrcb)[0] * np.shape(img_ycrcb)[1] - landmark_pixel_sum - 1)
-#     print("cbcr_cov:",cbcr_cov)
-
-#     cost = time.time() - cost
-#     print("covariance_matrix cost time:", cost)
-
-#     return np.mat(cbcr_cov)
-
 
 def single_gaussian_model(image, mean, cov):
     cost = time.time()
@@ -196,7 +159,7 @@ def single_gaussian_model(image, mean, cov):
         xdiff = cbcr[row] - mean
         p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
         pdfs.append(p)
-        if p >= 0.00418:
+        if p >= possibly:
             imgravel[row] = 255
         else:
             imgravel[row] = 0 #非人脸部分填充黑色
@@ -272,10 +235,6 @@ def remove_noise(image, landmark, cbcr):
     circle = (int(image.shape[0]/2), int(image.shape[1]/2))
     radius = image.shape[0]/2
 
-    # #cbcr转换为一维数组[[cb,cr],[cb,cr],...]
-    # cbcr = np.column_stack((cbcr[0], cbcr[1])) 
-    print("cbcr shape", cbcr.shape)
-
     delete_array = []
     for row in range(image.shape[0]):
         for col in range(image.shape[1]):
@@ -289,6 +248,61 @@ def remove_noise(image, landmark, cbcr):
 
     print("cost time:", time.time() - t1)
     return cbcr
+
+#计算耳部区域
+#params  face_box: 脸部矩形区域，包含左上角点坐标和右下角点坐标
+def cal_ear_area_pt(face_box):
+	assert len(face_box) > 3, "face box len error"
+
+	#左上角坐标
+	face_left_up_pt = face_box[:2]
+
+	#右下角坐标
+	face_right_down_pt = face_box[2:4]
+
+	face_height = face_right_down_pt[1] - face_left_up_pt[1]
+	face_width = face_right_down_pt[0] - face_left_up_pt[0]
+
+	ear_height = 1.1 * face_height
+	ear_width = 0.6 * face_width
+
+	#左耳朵区域，左上角和右下角坐标
+	ear_left_pt = []
+	ear_left_pt.append(face_left_up_pt[0] - 0.5 * face_width)
+	ear_left_pt.append(face_left_up_pt[1] + 0.3 * face_height)
+	ear_left_pt.append(ear_left_pt[0] + 0.6 * face_width)
+	ear_left_pt.append(ear_left_pt[1] + 1.1 * face_height)
+
+	#右耳朵区域，左上角和右下角坐标
+	ear_right_pt = []
+	ear_right_pt.append(face_left_up_pt[0] + 0.9 * face_width)   
+	ear_right_pt.append(face_left_up_pt[1] + 0.3 * face_height)
+	ear_right_pt.append(ear_right_pt[0] + 0.6 * face_width)
+	ear_right_pt.append(ear_right_pt[1] + 1.1 * face_height)
+
+	return [ear_left_pt, ear_right_pt]
+
+#感兴趣区域图像截取(face & ear)
+def ROI(image, bbox):
+    ear_bboxs = cal_ear_area_pt(bbox)
+
+    left_ear = ear_bboxs[0]
+    right_ear = ear_bboxs[1]
+
+    left_point_x = int(left_ear[0])
+    left_point_y = int(bbox[1])
+
+    right_point_x = int(right_ear[2])
+    right_point_y = int(right_ear[3])
+
+    print("image shape", image.shape)
+    print("ear_bboxs:", ear_bboxs)
+    print("face bbox:", bbox)
+    img = image[left_point_y:right_point_y, left_point_x : right_point_x] 
+
+    cv2.imshow("ROI",img)
+    cv2.waitKey(0) & 0xFF == ord('q')
+    return img
 
 def is_outside_of_circle(point, circle, radius):
     (x, y) = point
@@ -372,9 +386,22 @@ def test_show_landmark_area(image, landmark):
     cv2.waitKey(0) & 0xFF == ord('q')
     
 def test_show_gaussion_probability(probabilitys):
+    t1 = time.time()
+    n, bins, patchs = plt.hist(probabilitys, bins=30)
 
-    plt.hist(probabilitys, bins=30)
-    plt.show()
+    sumn = np.sum(n)
+    count = 0
+    for i in range(len(n)):
+        pro = float((n[i]+count)/sumn)
+        print("%.4f:%d:%.2f"%(bins[i], n[i], pro))
+        if pro >= 0.3 and pro <= 0.45:
+            global possibly
+            possibly = bins[i] 
+            print("possibly:", possibly)
+            break
+        count += n[i]
+    print("gaussion_probability cost time:", time.time() - t1)
+    # plt.show()
 
 #测试显示需要去除的特征点位置
 def test_show_remove_landmark_piexl(image, landmark):
