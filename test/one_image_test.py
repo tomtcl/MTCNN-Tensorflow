@@ -77,7 +77,7 @@ def main():
         skinDetect(image, all_boxes[count][0], landmarks[count][0])
 
         count = count + 1
-        cv2.imwrite("%d.png" %(count),image)
+        # cv2.imwrite("%d.png" %(count),image)
         cv2.imshow("lala",image)
         if cv2.waitKey(0) & 0xFF == ord('q'):
             continue  
@@ -394,7 +394,7 @@ def test_show_gaussion_probability(probabilitys):
     for i in range(len(n)):
         pro = float((n[i]+count)/sumn)
         print("%.4f:%d:%.2f"%(bins[i], n[i], pro))
-        if pro >= 0.3 and pro <= 0.45:
+        if pro >= 0.3 and pro <= 0.35:
             global possibly
             possibly = bins[i] 
             print("possibly:", possibly)
