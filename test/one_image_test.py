@@ -12,8 +12,15 @@ import os
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+from skimage.feature import hog 
+import sklearn.svm as ssv 
+from sklearn.externals import joblib  
 
-np.set_printoptions(threshold='nan') 
+# np.set_printoptions(threshold='nan') 
+
+possibly = 0.0      #高斯概率密度返回波峰阈值
+m = '20pixel'       # HoG choses pixel per cell will gain different number of feature values. 
+dimension = 100     # this is to define how dimentions u want for PCA
 
 possibly = 0.0
 
@@ -55,16 +62,47 @@ def main():
     #imdb_['image'] = im_path
     #imdb_['label'] = 5
     path = "tel"
-    for item in os.listdir(path):
-        if item[0] != '.':
-            gt_imdb.append(os.path.join(path,item))
-    test_data = TestLoader(gt_imdb)
-    all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+    # for item in os.listdir(path):
+    #     if item[0] != '.':
+    #         gt_imdb.append(os.path.join(path,item))
+    # test_data = TestLoader(gt_imdb)
+    # all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+    # count = 0
+    # # imagepath = gt_imdb[0]
+    # for imagepath in gt_imdb:
+    #     print(imagepath)
+    #     image = cv2.imread(imagepath)
+    #     for bbox in all_boxes[count]:
+    #         # skinDetect(image, bbox)
+    #         cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
+    #         cv2.rectangle(image, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255))
+            
+    #     for landmark in landmarks[count]:
+    #         for i in range(len(landmark)/2):
+    #             # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
+    #             cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
+    #     # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+
+
+    #     count = count + 1
+    #     # cv2.imwrite("%d.png" %(count),image)
+    #     cv2.imshow("lala",image)
+    #     if cv2.waitKey(0) & 0xFF == ord('q'):
+    #         continue  
+
     count = 0
-    # imagepath = gt_imdb[0]
-    for imagepath in gt_imdb:
-        print(imagepath)
+    fds = []
+    labels = []
+    num = 0
+    for item in os.listdir(path):
+        if item[0] == '.':
+            continue
+        imagepath = os.path.join(path,item)
+        test_data = TestLoader([imagepath])
+        all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+        print("%d Dealing with %s"%(num,imagepath))
         image = cv2.imread(imagepath)
+
         # for bbox in all_boxes[count]:
         #     # skinDetect(image, bbox)
         #     cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
@@ -74,14 +112,41 @@ def main():
         #     for i in range(len(landmark)/2):
         #         # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
         #         cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
-        skinDetect(image, all_boxes[count][0], landmarks[count][0])
 
-        count = count + 1
-        # cv2.imwrite("%d.png" %(count),image)
-        cv2.imshow("lala",image)
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            continue  
+        #------------------------Skin Detection------------------------
+        # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+        # cv2.imwrite("%s" %(item),gray)
+        #------------------------HOG------------------------ 
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        fd = hog_feature(gray)
+        fds.append(fd)
+        labels.append(1.0)
+        
+        num += 1
+        # cv2.imshow("lala",image)
+        # if cv2.waitKey(0) & 0xFF == ord('q'):
+        #     continue
 
+#------------------------PCA--------------------------------------------------   
+    print("fds shape")
+    fds = np.array(fds)
+    print(fds)
+    fds = pca_feature(fds)
+    t0 = time.time()  
+#------------------------SVM--------------------------------------------------   
+    model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
+
+    clf = ssv.SVC(kernel='rbf')   
+    print "Training a SVM Classifier."   
+    print(fds)
+    print(labels)
+    clf.fit(fds, labels)   
+    joblib.dump(clf, model_path)  
+  
+    t1 = time.time()   
+    print "Classifier saved to {}".format(model_path)   
+    print 'The cast of time is :%f seconds' % (t1-t0) 
+         
 
 ##################################################
 #自适应肤色检测，根据面部肤色区域，计算均值 & 协方差矩阵
@@ -117,15 +182,66 @@ def skinDetect(image, bbox, landmark):
     #获取感兴趣区域图像(face & ear)
     roi_image = ROI(image, bbox)
 
+    #resize to 200 * 200
+    roi_image = cv2.resize(roi_image,(200,200),interpolation=cv2.INTER_CUBIC) 
+
+    return cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
     #计算整张图片的单峰高斯概率密度pdf
-    single_gaussian_model(roi_image, cbcr_mean, cbcr_cov)
+    return single_gaussian_model(roi_image, cbcr_mean, cbcr_cov)
+
+
+##################################################
+#获取图像Hog特征
+##################################################
+def hog_feature(image):
+    visualize = False  
+    block_norm = 'L2-Hys'  
+    cells_per_block = (2,2) 
+    pixels_per_cell = (20,20)  
+    orientations = 9  
+
+    fd = hog(image, orientations, pixels_per_cell, cells_per_block, block_norm, visualize)
+    print(fd)
+
+    return fd
+
+##################################################
+#HOG 特征采用PCA降维
+##################################################
+def pca_feature(features, dimension = 100):
+    print "Start to do PCA..."   
+ 
+    t1 = time.time()   
+    newData,meanVal=zeroMean(features)   
+    covMat=np.cov(newData,rowvar=0)   
+    eigVals,eigVects=np.linalg.eig(np.mat(covMat)) # calculate feature value and feature vector   
+    
+    joblib.dump(eigVals,'./features/PCA/%s/eigVals_train_%s.eig' %(m,m),compress=3)    
+    joblib.dump(eigVects,'./features/PCA/%s/eigVects_train_%s.eig' %(m,m),compress=3)  
+
+    eigValIndice=np.argsort(eigVals) # sort feature value
+    n_eigValIndice=eigValIndice[-1:-(dimension+1):-1] # take n feature value   
+    n_eigVect=eigVects[:,n_eigValIndice] # take n feature vector 
+    joblib.dump(n_eigVect,'./features/PCA/%s/n_eigVects_train_%s_%s.eig' %(m,m,dimension))    
+    lowDDataMat=newData*n_eigVect # calculate low dimention data
+     
+    t2 = time.time()   
+    print "PCA takes %f seconds" %(t2-t1)   
+    
+    return lowDDataMat 
+
+def zeroMean(dataMat): # zero normalisation
+    meanVal=np.mean(dataMat,axis=0) # calculate mean value of every column.   
+    joblib.dump(meanVal,'./features/PCA/%s/meanVal_train_%s.mean' %(m,m)) # save mean value   
+    newData=dataMat-meanVal   
+    return newData,meanVal
 
 ##################################################
 #采用mean公式计算均值
 ##################################################
 def mean(cbcr):
     cbcr_mean = np.mean(cbcr, axis=1)
-    print("cbcr_mean:", cbcr_mean)
+    # print("cbcr_mean:", cbcr_mean)
     return cbcr_mean
 
 ##################################################
@@ -133,7 +249,7 @@ def mean(cbcr):
 ##################################################
 def covariance_matrix(cbcr):
     cbcr_cov = np.cov(cbcr)
-    print("cbcr_cov:", cbcr_cov)
+    # print("cbcr_cov:", cbcr_cov)
     return cbcr_cov
 
 def single_gaussian_model(image, mean, cov):
@@ -160,20 +276,18 @@ def single_gaussian_model(image, mean, cov):
         p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
         pdfs.append(p)
         if p >= possibly:
-            imgravel[row] = 255
+            imgravel[row] = 255.0
         else:
-            imgravel[row] = 0 #非人脸部分填充黑色
-    #Test......
-    # print("prox:",len(pdfs), "sum:", sum(pdfs))
-    # test_show_hist(pdfs)
-
-    img_gray = imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])
+            imgravel[row] = 0.0 #非人脸部分填充黑色
 
     cost = time.time() - cost
     print("single_gaussian_model cost time:", cost)
 
-    cv2.imshow("gray",img_gray)
-    cv2.waitKey(0) & 0xFF == ord('q')
+    # cv2.imshow("gray",img_gray)
+    # cv2.waitKey(0) & 0xFF == ord('q')
+
+    return imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])    
+
 
 #计算特征点相对位置，因为需截取人脸位置，所以计算特征点相对人脸坐标的位置
 def landmark_relative(bbox,landmark):
@@ -295,13 +409,13 @@ def ROI(image, bbox):
     right_point_x = int(right_ear[2])
     right_point_y = int(right_ear[3])
 
-    print("image shape", image.shape)
-    print("ear_bboxs:", ear_bboxs)
-    print("face bbox:", bbox)
+    # print("image shape", image.shape)
+    # print("ear_bboxs:", ear_bboxs)
+    # print("face bbox:", bbox)
     img = image[left_point_y:right_point_y, left_point_x : right_point_x] 
 
-    cv2.imshow("ROI",img)
-    cv2.waitKey(0) & 0xFF == ord('q')
+    # cv2.imshow("ROI",img)
+    # cv2.waitKey(0) & 0xFF == ord('q')
     return img
 
 def is_outside_of_circle(point, circle, radius):
@@ -393,7 +507,7 @@ def test_show_gaussion_probability(probabilitys):
     count = 0
     for i in range(len(n)):
         pro = float((n[i]+count)/sumn)
-        print("%.4f:%d:%.2f"%(bins[i], n[i], pro))
+        # print("%.4f:%d:%.2f"%(bins[i], n[i], pro))
         if pro >= 0.3 and pro <= 0.35:
             global possibly
             possibly = bins[i] 
