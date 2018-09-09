@@ -57,39 +57,7 @@ def main():
     mtcnn_detector = MtcnnDetector(detectors=detectors, min_face_size=min_face_size,
                                 stride=stride, threshold=thresh, slide_window=slide_window)
     gt_imdb = []
-    #gt_imdb.append("35_Basketball_Basketball_35_515.jpg")
-    #imdb_ = dict()"
-    #imdb_['image'] = im_path
-    #imdb_['label'] = 5
     path = "tel"
-    # for item in os.listdir(path):
-    #     if item[0] != '.':
-    #         gt_imdb.append(os.path.join(path,item))
-    # test_data = TestLoader(gt_imdb)
-    # all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
-    # count = 0
-    # # imagepath = gt_imdb[0]
-    # for imagepath in gt_imdb:
-    #     print(imagepath)
-    #     image = cv2.imread(imagepath)
-    #     for bbox in all_boxes[count]:
-    #         # skinDetect(image, bbox)
-    #         cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
-    #         cv2.rectangle(image, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255))
-            
-    #     for landmark in landmarks[count]:
-    #         for i in range(len(landmark)/2):
-    #             # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
-    #             cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
-    #     # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
-
-
-    #     count = count + 1
-    #     # cv2.imwrite("%d.png" %(count),image)
-    #     cv2.imshow("lala",image)
-    #     if cv2.waitKey(0) & 0xFF == ord('q'):
-    #         continue  
-
     count = 0
     fds = []
     labels = []
@@ -97,9 +65,14 @@ def main():
     for item in os.listdir(path):
         if item[0] == '.':
             continue
+
         imagepath = os.path.join(path,item)
         test_data = TestLoader([imagepath])
         all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+        
+        print(all_boxes)
+        if len(all_boxes[0]) == 0:
+            continue
         print("%d Dealing with %s"%(num,imagepath))
         image = cv2.imread(imagepath)
 
@@ -114,13 +87,15 @@ def main():
         #         cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
 
         #------------------------Skin Detection------------------------
-        # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+        gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
         # cv2.imwrite("%s" %(item),gray)
         #------------------------HOG------------------------ 
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         fd = hog_feature(gray)
         fds.append(fd)
-        labels.append(1.0)
+        if num % 3 == 0:
+            labels.append(1.0)
+        else:
+            labels.append(0.0)
         
         num += 1
         # cv2.imshow("lala",image)
@@ -130,16 +105,18 @@ def main():
 #------------------------PCA--------------------------------------------------   
     print("fds shape")
     fds = np.array(fds)
+    print("type: %s  shape:%s"%(type(fds), fds.shape))
     print(fds)
     fds = pca_feature(fds)
+
     t0 = time.time()  
 #------------------------SVM--------------------------------------------------   
     model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
 
     clf = ssv.SVC(kernel='rbf')   
     print "Training a SVM Classifier."   
-    print(fds)
-    print(labels)
+    print("fds type: %s  shape:%s"%(type(fds), fds.shape))
+    # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
     clf.fit(fds, labels)   
     joblib.dump(clf, model_path)  
   
@@ -155,8 +132,12 @@ def main():
 def skinDetect(image, bbox, landmark):
     t1 = time.time()
     #裁剪出脸部区域
-    crop_image = image[int(bbox[1]): int(bbox[3]), int(bbox[0]): int(bbox[2])]
-    
+    y1 = int(round(bbox[1])) if int(round(bbox[1])) > 0 else 0
+    y2 = int(round(bbox[3])) if int(round(bbox[3])) > 0 else 0
+    x1 = int(round(bbox[0])) if int(round(bbox[0])) > 0 else 0
+    x2 = int(round(bbox[2])) if int(round(bbox[2])) > 0 else 0
+    crop_image = image[y1:y2, x1:x2]
+
     #转换为YCrYCb颜色空间图片
     img_ycrcb = cv2.cvtColor(crop_image, cv2.COLOR_BGR2YCrCb)
 
@@ -177,15 +158,16 @@ def skinDetect(image, bbox, landmark):
 
     # TEST------
     face_single_gaussian_model(cbcr, cbcr_mean, cbcr_cov)
-    print("skinDetect cost time:", time.time() - t1)
+    # print("skinDetect cost time:", time.time() - t1)
     
     #获取感兴趣区域图像(face & ear)
     roi_image = ROI(image, bbox)
 
+    # print("roi_image shape:", roi_image.shape)
     #resize to 200 * 200
     roi_image = cv2.resize(roi_image,(200,200),interpolation=cv2.INTER_CUBIC) 
 
-    return cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
+    # return cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
     #计算整张图片的单峰高斯概率密度pdf
     return single_gaussian_model(roi_image, cbcr_mean, cbcr_cov)
 
@@ -281,7 +263,7 @@ def single_gaussian_model(image, mean, cov):
             imgravel[row] = 0.0 #非人脸部分填充黑色
 
     cost = time.time() - cost
-    print("single_gaussian_model cost time:", cost)
+    # print("single_gaussian_model cost time:", cost)
 
     # cv2.imshow("gray",img_gray)
     # cv2.waitKey(0) & 0xFF == ord('q')
@@ -403,17 +385,20 @@ def ROI(image, bbox):
     left_ear = ear_bboxs[0]
     right_ear = ear_bboxs[1]
 
-    left_point_x = int(left_ear[0])
-    left_point_y = int(bbox[1])
+    #赋值的同时判断是否超出图像边界
+    left_point_x = int(round(left_ear[0])) if int(round(left_ear[0])) > 0 else 0
+    left_point_y = int(round(bbox[1])) if int(round(bbox[1])) > 0 else 0
 
-    right_point_x = int(right_ear[2])
-    right_point_y = int(right_ear[3])
+    right_point_x = int(round(right_ear[2])) if int(round(right_ear[2])) < image.shape[1] else image.shape[1]
+    right_point_y = int(round(right_ear[3])) if int(round(right_ear[3])) < image.shape[0] else image.shape[0]
 
+    img = image[left_point_y:right_point_y, left_point_x : right_point_x] 
     # print("image shape", image.shape)
+    # print(left_point_x, right_point_x, left_point_y,right_point_y)
     # print("ear_bboxs:", ear_bboxs)
     # print("face bbox:", bbox)
-    img = image[left_point_y:right_point_y, left_point_x : right_point_x] 
-
+    
+    # print("img shape:",img.shape)
     # cv2.imshow("ROI",img)
     # cv2.waitKey(0) & 0xFF == ord('q')
     return img
@@ -511,10 +496,10 @@ def test_show_gaussion_probability(probabilitys):
         if pro >= 0.3 and pro <= 0.35:
             global possibly
             possibly = bins[i] 
-            print("possibly:", possibly)
+            # print("possibly:", possibly)
             break
         count += n[i]
-    print("gaussion_probability cost time:", time.time() - t1)
+    # print("gaussion_probability cost time:", time.time() - t1)
     # plt.show()
 
 #测试显示需要去除的特征点位置
