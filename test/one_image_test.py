@@ -61,7 +61,7 @@ def main():
     count = 0
     fds = []
     labels = []
-    num = 0
+    num = 126
     for item in os.listdir(path):
         if item[0] == '.':
             continue
@@ -70,12 +70,10 @@ def main():
         test_data = TestLoader([imagepath])
         all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
         
-        print(all_boxes)
         if len(all_boxes[0]) == 0:
             continue
         print("%d Dealing with %s"%(num,imagepath))
         image = cv2.imread(imagepath)
-        # crop_image(image, all_boxes[count][0], num)
         # for bbox in all_boxes[count]:
         #     # skinDetect(image, bbox)
         #     cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
@@ -90,12 +88,12 @@ def main():
         gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
         # cv2.imwrite("%s" %(item),gray)
         #------------------------HOG------------------------ 
-        fd = hog_feature(gray)
-        fds.append(fd)
-        if num % 3 == 0:
-            labels.append(1.0)
-        else:
-            labels.append(0.0)
+        # fd = hog_feature(gray)
+        # fds.append(fd)
+        # if num % 3 == 0:
+        #     labels.append(1.0)
+        # else:
+        #     labels.append(0.0)
         
         num += 1
         # cv2.imshow("lala",image)
@@ -103,26 +101,26 @@ def main():
         #     continue
 
 #------------------------PCA--------------------------------------------------   
-    print("fds shape")
-    fds = np.array(fds)
-    print("type: %s  shape:%s"%(type(fds), fds.shape))
-    print(fds)
-    fds = pca_feature(fds)
+#     print("fds shape")
+#     fds = np.array(fds)
+#     print("type: %s  shape:%s"%(type(fds), fds.shape))
+#     print(fds)
+#     fds = pca_feature(fds)
 
-    t0 = time.time()  
-#------------------------SVM--------------------------------------------------   
-    model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
+#     t0 = time.time()  
+# #------------------------SVM--------------------------------------------------   
+#     model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
 
-    clf = ssv.SVC(kernel='rbf')   
-    print "Training a SVM Classifier."   
-    print("fds type: %s  shape:%s"%(type(fds), fds.shape))
-    # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
-    clf.fit(fds, labels)   
-    joblib.dump(clf, model_path)  
+#     clf = ssv.SVC(kernel='rbf')   
+#     print "Training a SVM Classifier."   
+#     print("fds type: %s  shape:%s"%(type(fds), fds.shape))
+#     # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
+#     clf.fit(fds, labels)   
+#     joblib.dump(clf, model_path)  
   
-    t1 = time.time()   
-    print "Classifier saved to {}".format(model_path)   
-    print 'The cast of time is :%f seconds' % (t1-t0) 
+#     t1 = time.time()   
+#     print "Classifier saved to {}".format(model_path)   
+#     print 'The cast of time is :%f seconds' % (t1-t0) 
          
 
 ##################################################
@@ -457,15 +455,18 @@ def crop_image(image, bbox, num):
     width = bbox[2] - bbox[0]
     height = bbox[3] - bbox[1]
 
-    left_point_x = int(round(bbox[0] - width * 1.5)) if int(round(bbox[0] - width * 1.5)) > 0 else 0
-    right_point_x = int(round(bbox[2] + width * 1.5)) if int(round(bbox[2] + width * 1.5)) < image.shape[1] else image.shape[1]
+    left_point_x = int(round(bbox[0] - width * 1.0)) if int(round(bbox[0] - width * 1.5)) > 0 else 0
+    right_point_x = int(round(bbox[2] + width * 1.0)) if int(round(bbox[2] + width * 1.5)) < image.shape[1] else image.shape[1]
 
     left_point_y = int(round(bbox[1] - height)) if int(round(bbox[1] - height)) > 0 else 0
     right_point_y = int(round(bbox[3] + height * 1.5 )) if int(round(bbox[3] + height * 2 )) < image.shape[0] else image.shape[0]
 
     crop = image[left_point_y:right_point_y, left_point_x : right_point_x]
 
-    cv2.imwrite("resize/img_%d.png"%(num), crop)
+    Hight = int((250.0 * crop.shape[0]) / crop.shape[1])
+
+    img = cv2.resize(crop, (250, Hight), interpolation=cv2.INTER_CUBIC)
+    cv2.imwrite("resize/img_%d.jpg"%(num), img)
 
 #Test......
 def test_show_landmark_point(image, landmark):
