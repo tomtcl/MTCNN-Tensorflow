@@ -75,7 +75,7 @@ def main():
             continue
         print("%d Dealing with %s"%(num,imagepath))
         image = cv2.imread(imagepath)
-
+        # crop_image(image, all_boxes[count][0], num)
         # for bbox in all_boxes[count]:
         #     # skinDetect(image, bbox)
         #     cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
@@ -265,10 +265,11 @@ def single_gaussian_model(image, mean, cov):
     cost = time.time() - cost
     # print("single_gaussian_model cost time:", cost)
 
-    # cv2.imshow("gray",img_gray)
-    # cv2.waitKey(0) & 0xFF == ord('q')
-
-    return imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])    
+    # img_gray = imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])
+    img_gray = close_operation(img_gray)
+    cv2.imshow("gray",img_gray)
+    cv2.waitKey(0) & 0xFF == ord('q')
+    return  img_gray  
 
 
 #计算特征点相对位置，因为需截取人脸位置，所以计算特征点相对人脸坐标的位置
@@ -451,6 +452,21 @@ def open_operation(image):
     img = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
     return img
     
+def crop_image(image, bbox, num):
+    
+    width = bbox[2] - bbox[0]
+    height = bbox[3] - bbox[1]
+
+    left_point_x = int(round(bbox[0] - width * 1.5)) if int(round(bbox[0] - width * 1.5)) > 0 else 0
+    right_point_x = int(round(bbox[2] + width * 1.5)) if int(round(bbox[2] + width * 1.5)) < image.shape[1] else image.shape[1]
+
+    left_point_y = int(round(bbox[1] - height)) if int(round(bbox[1] - height)) > 0 else 0
+    right_point_y = int(round(bbox[3] + height * 1.5 )) if int(round(bbox[3] + height * 2 )) < image.shape[0] else image.shape[0]
+
+    crop = image[left_point_y:right_point_y, left_point_x : right_point_x]
+
+    cv2.imwrite("resize/img_%d.png"%(num), crop)
+
 #Test......
 def test_show_landmark_point(image, landmark):
     for i in range(len(landmark)/2):
