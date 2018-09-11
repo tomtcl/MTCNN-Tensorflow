@@ -25,7 +25,77 @@ dimension = 100     # this is to define how dimentions u want for PCA
 possibly = 0.0
 
 def main():
+    path = "test_positive"
+    count = 0
+    fds = []
+    labels = []
+
+    # MTCNN检测器
+    mtcnn_detector = mtcnn_detector_init()    
+   
+    num = 0
+    for item in os.listdir(path):
+        if item[0] == '.':
+            continue
+
+        imagepath = os.path.join(path,item)
+        test_data = TestLoader([imagepath])
+
+        all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+        if len(all_boxes[0]) == 0:
+            continue
+
+        print("%d Dealing with %s"%(num,imagepath))
+        image = cv2.imread(imagepath)
+
+        img = crop_image(image, all_boxes[count][0], num)
+        #Skin Detection
+        # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+        
+        cv2.imwrite("%s_resize/img_%d.jpg"%(path,num), img)
+        # HOG 
+        # fd = hog_feature(image)
+        # fds.append(fd)
+        # if cmp(path, "positive") == 0:
+        #     print("true")
+        #     labels.append(1.0)
+        # else:
+        #     labels.append(0.0)
+
+        num += 1
+        # cv2.imshow("lala",image)
+        # if cv2.waitKey(0) & 0xFF == ord('q'):
+        #     continue
     
+
+
+#------------------------PCA--------------------------------------------------   
+#     print("fds shape")
+#     fds = np.array(fds)
+#     print("type: %s  shape:%s"%(type(fds), fds.shape))
+#     print(fds)
+#     fds = pca_feature(fds)
+
+#     t0 = time.time()  
+#------------------------SVM--------------------------------------------------   
+#     model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
+
+#     clf = ssv.SVC(kernel='rbf')   
+#     print "Training a SVM Classifier."   
+#     print("fds type: %s  shape:%s"%(type(fds), fds.shape))
+#     # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
+#     clf.fit(fds, labels)   
+#     joblib.dump(clf, model_path)  
+  
+#     t1 = time.time()   
+#     print "Classifier saved to {}".format(model_path)   
+#     print 'The cast of time is :%f seconds' % (t1-t0) 
+
+
+##################################################
+# MTCNN 人脸检测器
+##################################################
+def mtcnn_detector_init():
     test_mode = "ONet"
     thresh = [0.9, 0.6, 0.7]
     min_face_size = 24
@@ -56,72 +126,8 @@ def main():
 
     mtcnn_detector = MtcnnDetector(detectors=detectors, min_face_size=min_face_size,
                                 stride=stride, threshold=thresh, slide_window=slide_window)
-    gt_imdb = []
-    path = "tel"
-    count = 0
-    fds = []
-    labels = []
-    num = 126
-    for item in os.listdir(path):
-        if item[0] == '.':
-            continue
-
-        imagepath = os.path.join(path,item)
-        test_data = TestLoader([imagepath])
-        all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
-        
-        if len(all_boxes[0]) == 0:
-            continue
-        print("%d Dealing with %s"%(num,imagepath))
-        image = cv2.imread(imagepath)
-        # for bbox in all_boxes[count]:
-        #     # skinDetect(image, bbox)
-        #     cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
-        #     cv2.rectangle(image, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255))
-            
-        # for landmark in landmarks[count]:
-        #     for i in range(len(landmark)/2):
-        #         # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
-        #         cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
-
-        #------------------------Skin Detection------------------------
-        gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
-        # cv2.imwrite("%s" %(item),gray)
-        #------------------------HOG------------------------ 
-        # fd = hog_feature(gray)
-        # fds.append(fd)
-        # if num % 3 == 0:
-        #     labels.append(1.0)
-        # else:
-        #     labels.append(0.0)
-        
-        num += 1
-        # cv2.imshow("lala",image)
-        # if cv2.waitKey(0) & 0xFF == ord('q'):
-        #     continue
-
-#------------------------PCA--------------------------------------------------   
-#     print("fds shape")
-#     fds = np.array(fds)
-#     print("type: %s  shape:%s"%(type(fds), fds.shape))
-#     print(fds)
-#     fds = pca_feature(fds)
-
-#     t0 = time.time()  
-# #------------------------SVM--------------------------------------------------   
-#     model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
-
-#     clf = ssv.SVC(kernel='rbf')   
-#     print "Training a SVM Classifier."   
-#     print("fds type: %s  shape:%s"%(type(fds), fds.shape))
-#     # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
-#     clf.fit(fds, labels)   
-#     joblib.dump(clf, model_path)  
-  
-#     t1 = time.time()   
-#     print "Classifier saved to {}".format(model_path)   
-#     print 'The cast of time is :%f seconds' % (t1-t0) 
-         
+    
+    return mtcnn_detector
 
 ##################################################
 #自适应肤色检测，根据面部肤色区域，计算均值 & 协方差矩阵
@@ -167,8 +173,11 @@ def skinDetect(image, bbox, landmark):
 
     # return cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
     #计算整张图片的单峰高斯概率密度pdf
-    return single_gaussian_model(roi_image, cbcr_mean, cbcr_cov)
+    gray = single_gaussian_model(roi_image, cbcr_mean, cbcr_cov)
+    t2 = time.time()
 
+    print("skinDetect cost time:%f"%(t2 - t1))
+    return gray
 
 ##################################################
 #获取图像Hog特征
@@ -265,8 +274,8 @@ def single_gaussian_model(image, mean, cov):
 
     # img_gray = imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])
     img_gray = close_operation(img_gray)
-    cv2.imshow("gray",img_gray)
-    cv2.waitKey(0) & 0xFF == ord('q')
+    # cv2.imshow("gray",img_gray)
+    # cv2.waitKey(0) & 0xFF == ord('q')
     return  img_gray  
 
 
@@ -466,9 +475,67 @@ def crop_image(image, bbox, num):
     Hight = int((250.0 * crop.shape[0]) / crop.shape[1])
 
     img = cv2.resize(crop, (250, Hight), interpolation=cv2.INTER_CUBIC)
-    cv2.imwrite("resize/img_%d.jpg"%(num), img)
+    
+    return img
 
 #Test......
+def test_svm_classification():
+    paths = ["test_positive", "test_negative"]
+    count = 0
+    fds = []
+    labels = []
+
+    # MTCNN检测器
+    mtcnn_detector = mtcnn_detector_init() 
+
+    num = 0
+    for path in paths
+        for item in os.listdir(path):
+            if item[0] == '.':
+                continue
+
+            imagepath = os.path.join(path,item)
+            test_data = TestLoader([imagepath])
+
+            all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+            if len(all_boxes[0]) == 0:
+                continue
+
+            print("%d Dealing with %s"%(num,imagepath))
+            image = cv2.imread(imagepath)
+
+            #Skin Detection
+            gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+
+            # HOG 
+            fd = hog_feature(image)
+            fds.append(fd)
+            if cmp(path, "positive") == 0:
+                print("true")
+                labels.append(1.0)
+            else:
+                labels.append(0.0)
+
+            num += 1
+            # cv2.imshow("lala",image)
+            # if cv2.waitKey(0) & 0xFF == ord('q'):
+            #     continue
+
+
+def test_show_face_area(image, bbox):
+    for bbox in all_boxes[count]:
+        # skinDetect(image, bbox)
+        cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
+        cv2.rectangle(image, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255))
+
+
+def test_show_landmark_area(image, landmark):
+    for landmark in landmarks[count]:
+        for i in range(len(landmark)/2):
+            # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
+            cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
+
+
 def test_show_landmark_point(image, landmark):
     for i in range(len(landmark)/2):
         print("landmark point:",i)
@@ -477,7 +544,7 @@ def test_show_landmark_point(image, landmark):
     cv2.imshow("landmarl", image)
     cv2.waitKey(0) & 0xFF == ord('q')
 
-def test_show_landmark_area(image, landmark):
+def test_show_landmark_modify_area(image, landmark):
     eye_width = 30
     eye_height = 30
     nose_height = 10
