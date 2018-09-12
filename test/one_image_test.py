@@ -168,15 +168,15 @@ def skinDetect(image, bbox, landmark):
     # print("skinDetect cost time:", time.time() - t1)
     
     #获取感兴趣区域图像(face & ear)
-    roi_image = ROI(image, bbox)
+    (position,roi_image) = ROI(image, bbox)
 
     # print("roi_image shape:", roi_image.shape)
     #resize to 200 * 200
-    roi_image = cv2.resize(roi_image,(200,200),interpolation=cv2.INTER_CUBIC) 
+    # roi_image = cv2.resize(roi_image,(200,200),interpolation=cv2.INTER_CUBIC) 
 
     # return cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
     #计算整张图片的单峰高斯概率密度pdf
-    gray = single_gaussian_model(roi_image, cbcr_mean, cbcr_cov)
+    gray = single_gaussian_model(roi_image, position, cbcr_mean, cbcr_cov)
     t2 = time.time()
 
     print("skinDetect cost time:%f"%(t2 - t1))
@@ -244,7 +244,7 @@ def covariance_matrix(cbcr):
     # print("cbcr_cov:", cbcr_cov)
     return cbcr_cov
 
-def single_gaussian_model(image, mean, cov):
+def single_gaussian_model(image, position, mean, cov):
     cost = time.time()
 
     img_ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
@@ -264,14 +264,16 @@ def single_gaussian_model(image, mean, cov):
 
     pdfs = []
     for row in range(np.shape(cbcr)[0]):
-        
-        xdiff = cbcr[row] - mean
-        p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
-        pdfs.append(p)
-        if p >= possibly:
-            imgravel[row] = 255.0
+        if (row % image.shape[1] < position[0] and row / image.shape[1] < position[1]) or (row % image.shape[1] > position[2] and row / image.shape[1] < position[3]):
+            imgravel[row] = 0.0
         else:
-            imgravel[row] = 0.0 #非人脸部分填充黑色
+            xdiff = cbcr[row] - mean
+            p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
+            pdfs.append(p)
+            if p >= possibly:
+                imgravel[row] = 255.0
+            else:
+                imgravel[row] = 0.0 #非人脸部分填充黑色
 
     cost = time.time() - cost
     # print("single_gaussian_model cost time:", cost)
@@ -406,11 +408,18 @@ def ROI(image, bbox):
     right_point_y = int(round(right_ear[3])) if int(round(right_ear[3])) < image.shape[0] else image.shape[0]
 
     img = image[left_point_y:right_point_y, left_point_x : right_point_x] 
-        
-    # print("img shape:",img.shape)
-    # cv2.imshow("ROI",img)
-    # cv2.waitKey(0) & 0xFF == ord('q')
-    return img
+
+    x1 = bbox[0] - left_point_x #人脸左上角新位置x
+    y1 = left_ear[1] - bbox[1]  #左耳朵左上角新位置y
+    x2 = bbox[2] - left_point_x 
+    y2 = right_ear[1] - bbox[1] 
+
+    cv2.rectangle(img, (0,0), (int(x1), int(y1)), (0,0,255))
+    cv2.rectangle(img, (int(x2),0), (img.shape[1], int(y2)), (0,0,255))
+    print("img shape:",img.shape)
+    cv2.imshow("ROI",img)
+    cv2.waitKey(0) & 0xFF == ord('q')
+    return ([x1,y1,x2,y2],img)
 
 def is_outside_of_circle(point, circle, radius):
     (x, y) = point
