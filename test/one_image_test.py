@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from skimage.feature import hog 
 import sklearn.svm as ssv 
 from sklearn.externals import joblib  
+from scipy.stats import multivariate_normal
 
 # np.set_printoptions(threshold='nan') 
 
@@ -25,7 +26,8 @@ dimension = 100     # this is to define how dimentions u want for PCA
 possibly = 0.0
 
 def main():
-    path = "test_positive"
+    # test_svm_classification()
+    path = "tel"
     count = 0
     fds = []
     labels = []
@@ -33,7 +35,7 @@ def main():
     # MTCNN检测器
     mtcnn_detector = mtcnn_detector_init()    
    
-    num = 0
+    num = 148
     for item in os.listdir(path):
         if item[0] == '.':
             continue
@@ -48,11 +50,11 @@ def main():
         print("%d Dealing with %s"%(num,imagepath))
         image = cv2.imread(imagepath)
 
-        img = crop_image(image, all_boxes[count][0], num)
+        # img = crop_image(image, all_boxes[count][0], num)
         #Skin Detection
-        # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+        gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
         
-        cv2.imwrite("%s_resize/img_%d.jpg"%(path,num), img)
+        # cv2.imwrite("resize/img_%d.jpg"%(num), img)
         # HOG 
         # fd = hog_feature(image)
         # fds.append(fd)
@@ -140,6 +142,7 @@ def skinDetect(image, bbox, landmark):
     y2 = int(round(bbox[3])) if int(round(bbox[3])) > 0 else 0
     x1 = int(round(bbox[0])) if int(round(bbox[0])) > 0 else 0
     x2 = int(round(bbox[2])) if int(round(bbox[2])) > 0 else 0
+    print("y1:%d, y2:%d, x1:%d, x2:%d"%(y1,y2,x1,x2))
     crop_image = image[y1:y2, x1:x2]
 
     #转换为YCrYCb颜色空间图片
@@ -261,6 +264,7 @@ def single_gaussian_model(image, mean, cov):
 
     pdfs = []
     for row in range(np.shape(cbcr)[0]):
+        
         xdiff = cbcr[row] - mean
         p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
         pdfs.append(p)
@@ -274,8 +278,8 @@ def single_gaussian_model(image, mean, cov):
 
     # img_gray = imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])
     img_gray = close_operation(img_gray)
-    # cv2.imshow("gray",img_gray)
-    # cv2.waitKey(0) & 0xFF == ord('q')
+    cv2.imshow("gray",img_gray)
+    cv2.waitKey(0) & 0xFF == ord('q')
     return  img_gray  
 
 
@@ -310,17 +314,18 @@ def is_landmark_pixel(landmark, row, col):
 
 def face_single_gaussian_model(cbcr, mean, cov):
     #矩阵行列式 & 逆矩阵
-    covdet = np.linalg.det(cov)
-    covinv = np.linalg.inv(cov)
+    # covdet = np.linalg.det(cov)
+    # covinv = np.linalg.inv(cov)
 
-    probabilitys = []
+    # probabilitys = []
 
     #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
     cbcr = np.column_stack((cbcr[0], cbcr[1]))
-    for row in range(np.shape(cbcr)[0]):
-        xdiff = cbcr[row] - mean
-        p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
-        probabilitys.append(p)
+    # for row in range(np.shape(cbcr)[0]):
+    #     xdiff = cbcr[row] - mean
+    #     p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
+    #     probabilitys.append(p)
+    probabilitys = list(multivariate_normal.pdf(cbcr, mean = mean, cov=cov))
 
     test_show_gaussion_probability(probabilitys)
 
@@ -401,11 +406,7 @@ def ROI(image, bbox):
     right_point_y = int(round(right_ear[3])) if int(round(right_ear[3])) < image.shape[0] else image.shape[0]
 
     img = image[left_point_y:right_point_y, left_point_x : right_point_x] 
-    # print("image shape", image.shape)
-    # print(left_point_x, right_point_x, left_point_y,right_point_y)
-    # print("ear_bboxs:", ear_bboxs)
-    # print("face bbox:", bbox)
-    
+        
     # print("img shape:",img.shape)
     # cv2.imshow("ROI",img)
     # cv2.waitKey(0) & 0xFF == ord('q')
@@ -444,8 +445,8 @@ def is_landmark(point, landmark):
     return False
 
 #Gray world 预处理
-def grey_world(image):
-    return  cca.grey_world(image)
+# def grey_world(image):
+#     return  cca.grey_world(image)
 
 # 闭运算
 def close_operation(image):
@@ -481,15 +482,21 @@ def crop_image(image, bbox, num):
 #Test......
 def test_svm_classification():
     paths = ["test_positive", "test_negative"]
-    count = 0
-    fds = []
-    labels = []
+    n = 100
+    meanVal = joblib.load('./features/PCA/%s/meanVal_train_%s.mean' %(m,m)) 
+    n_eigVects = joblib.load('./features/PCA/%s/n_eigVects_train_%s_%s.eig' %(m,m,n))  
+    model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,n)
 
-    # MTCNN检测器
+    # MTCNN分类器
     mtcnn_detector = mtcnn_detector_init() 
 
+    # SVM 分类器
+    clf = joblib.load(model_path)
+
     num = 0
-    for path in paths
+    total = 0
+    for path in paths:
+        lable = 1 if cmp(path, "test_positive") == 0 else 0
         for item in os.listdir(path):
             if item[0] == '.':
                 continue
@@ -501,36 +508,38 @@ def test_svm_classification():
             if len(all_boxes[0]) == 0:
                 continue
 
-            print("%d Dealing with %s"%(num,imagepath))
+            print("%d Dealing with %s"%(total,imagepath))
             image = cv2.imread(imagepath)
 
             #Skin Detection
-            gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+            gray = skinDetect(image, all_boxes[0][0], landmarks[0][0])
 
             # HOG 
-            fd = hog_feature(image)
-            fds.append(fd)
-            if cmp(path, "positive") == 0:
-                print("true")
-                labels.append(1.0)
-            else:
-                labels.append(0.0)
-
-            num += 1
+            fd = hog_feature(gray)
+            
+            feature = fd.reshape((1, -1))
+            feature = feature - meanVal
+            feature = feature * n_eigVects
+            
+            result = clf.predict(feature) 
+            if int(result) == int(lable):
+                num += 1
+            total += 1
             # cv2.imshow("lala",image)
             # if cv2.waitKey(0) & 0xFF == ord('q'):
             #     continue
+    rate = float(num) / total
+    print 'The classification accuracy is %f' %rate 
 
-
-def test_show_face_area(image, bbox):
-    for bbox in all_boxes[count]:
+def test_show_face_area(image, all_boxes):
+    for bbox in all_boxes[0]:
         # skinDetect(image, bbox)
         cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
         cv2.rectangle(image, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255))
 
 
-def test_show_landmark_area(image, landmark):
-    for landmark in landmarks[count]:
+def test_show_landmark_area(image, landmarks):
+    for landmark in landmarks[0]:
         for i in range(len(landmark)/2):
             # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
             cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
