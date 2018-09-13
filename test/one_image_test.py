@@ -47,13 +47,16 @@ def main():
         if len(all_boxes[0]) == 0:
             continue
 
+        t1 = time.time()
         print("%d Dealing with %s"%(num,imagepath))
         image = cv2.imread(imagepath)
 
         # img = crop_image(image, all_boxes[count][0], num)
         #Skin Detection
         gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
-        
+        t2 = time.time()
+
+        print("total cost time:%f"%(t2 - t1))
         # cv2.imwrite("resize/img_%d.jpg"%(num), img)
         # HOG 
         # fd = hog_feature(image)
@@ -138,21 +141,13 @@ def mtcnn_detector_init():
 def skinDetect(image, bbox, landmark):
     t1 = time.time()
     #裁剪出脸部区域
-    y1 = int(round(bbox[1])) if int(round(bbox[1])) > 0 else 0
-    y2 = int(round(bbox[3])) if int(round(bbox[3])) > 0 else 0
-    x1 = int(round(bbox[0])) if int(round(bbox[0])) > 0 else 0
-    x2 = int(round(bbox[2])) if int(round(bbox[2])) > 0 else 0
-    print("y1:%d, y2:%d, x1:%d, x2:%d"%(y1,y2,x1,x2))
-    crop_image = image[y1:y2, x1:x2]
-
-    #转换为YCrYCb颜色空间图片
-    img_ycrcb = cv2.cvtColor(crop_image, cv2.COLOR_BGR2YCrCb)
-
+    crop_image = face_image(image, bbox)
+    
     #YCbCr 生成二维数组[[cb,cb,cb,cb,....], [cr,cr,cr,cr,cr,...]]
-    cbcr = resize_image_shape(img_ycrcb)
+    cbcr = image_reshape(crop_image)
 
     #调整五个特征点相对人脸的位置(之前是相对裁剪之前图片的位置)
-    landmark = landmark_relative(bbox, landmark)
+    # landmark = landmark_relative(bbox, landmark)
 
     #去除噪声(五官,内接圆外)
     # cbcr = remove_noise(crop_image, landmark, cbcr)
@@ -163,22 +158,20 @@ def skinDetect(image, bbox, landmark):
     #计算人脸区域协方差
     cbcr_cov = covariance_matrix(cbcr)
 
-    # TEST------
+    #计算face区域单高斯概率分布
     face_single_gaussian_model(cbcr, cbcr_mean, cbcr_cov)
-    # print("skinDetect cost time:", time.time() - t1)
     
     #获取感兴趣区域图像(face & ear)
     (position,roi_image) = ROI(image, bbox)
 
     # print("roi_image shape:", roi_image.shape)
-    #resize to 200 * 200
-    # roi_image = cv2.resize(roi_image,(200,200),interpolation=cv2.INTER_CUBIC) 
+    # resize to 200 * 200
+    roi_image = cv2.resize(roi_image,(200,200),interpolation=cv2.INTER_CUBIC) 
 
-    # return cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
     #计算整张图片的单峰高斯概率密度pdf
     gray = single_gaussian_model(roi_image, position, cbcr_mean, cbcr_cov)
-    t2 = time.time()
 
+    t2 = time.time()
     print("skinDetect cost time:%f"%(t2 - t1))
     return gray
 
@@ -244,44 +237,56 @@ def covariance_matrix(cbcr):
     # print("cbcr_cov:", cbcr_cov)
     return cbcr_cov
 
+
+# def face_single_gaussian_model(cbcr, mean, cov):
+#     #矩阵行列式 & 逆矩阵
+#     covdet = np.linalg.det(cov)
+#     covinv = np.linalg.inv(cov)
+
+#     probabilitys = []
+
+#     #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
+#     # t1 = time.time()
+#     cbcr = np.column_stack((cbcr[0], cbcr[1]))
+#     for row in range(np.shape(cbcr)[0]):
+#         xdiff = cbcr[row] - mean
+#         p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
+#         probabilitys.append(p)
+
+#     # t3 = time.time()
+
+#     # print("single_gaussian_model t1:%f  t2:%f"%(t2-t1,t3-t2))
+#     test_show_gaussion_probability(pdfs)
+
+
+def face_single_gaussian_model(cbcr, mean, cov):
+    t1 = time.time()
+    #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
+    cbcr = np.column_stack((cbcr[0], cbcr[1]))
+
+    pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov)
+
+    global possibly
+    possibly = find_gaussion_probability_threshold(pdfs)
+    t2 = time.time()
+    print("face_single_gaussian_model cost time:%f"%(t2-t1)) 
+
 def single_gaussian_model(image, position, mean, cov):
-    cost = time.time()
+    
+    #转换为YCbCr 且生成二维数组[[cb,cb,cb,cb,....], [cr,cr,cr,cr,cr,...]]
+    cbcr = image_reshape(image)
+    cbcr = np.column_stack((cbcr[0], cbcr[1]))
 
-    img_ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
-    _, cr, cb = cv2.split(img_ycrcb)
-    crravel = cr.ravel()
-    cbravel = cb.ravel()
-    # #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
-    cbcr = np.column_stack((cbravel, crravel)) 
+    #计算高斯概率密度分布
+    pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov)
+    pdfs[pdfs >= possibly] = 255    #矩阵元素大于阈值设置为白色
+    pdfs[pdfs < possibly] = 0       #矩阵小雨阈值设置为黑色
 
-    # 用于生成二值图(调试显示)
-    img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    imgravel = img_gray.ravel()
-
-    # #矩阵行列式 & 逆矩阵
-    covdet = np.linalg.det(cov)
-    covinv = np.linalg.inv(cov)
-
-    pdfs = []
-    for row in range(np.shape(cbcr)[0]):
-        if (row % image.shape[1] < position[0] and row / image.shape[1] < position[1]) or (row % image.shape[1] > position[2] and row / image.shape[1] < position[3]):
-            imgravel[row] = 0.0
-        else:
-            xdiff = cbcr[row] - mean
-            p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
-            pdfs.append(p)
-            if p >= possibly:
-                imgravel[row] = 255.0
-            else:
-                imgravel[row] = 0.0 #非人脸部分填充黑色
-
-    cost = time.time() - cost
-    # print("single_gaussian_model cost time:", cost)
-
-    # img_gray = imgravel.reshape(np.shape(img_gray)[0], np.shape(img_gray)[1])
+    img_gray = pdfs.reshape(image.shape[0], image.shape[1])
+    
     img_gray = close_operation(img_gray)
-    cv2.imshow("gray",img_gray)
-    cv2.waitKey(0) & 0xFF == ord('q')
+    # cv2.imshow("gray",img_gray)
+    # cv2.waitKey(0) & 0xFF == ord('q')
     return  img_gray  
 
 
@@ -314,26 +319,21 @@ def is_landmark_pixel(landmark, row, col):
 
     return False
 
-def face_single_gaussian_model(cbcr, mean, cov):
-    #矩阵行列式 & 逆矩阵
-    # covdet = np.linalg.det(cov)
-    # covinv = np.linalg.inv(cov)
 
-    # probabilitys = []
+def face_image(image, bbox):
+    y1 = int(round(bbox[1])) if int(round(bbox[1])) > 0 else 0
+    y2 = int(round(bbox[3])) if int(round(bbox[3])) > 0 else 0
+    x1 = int(round(bbox[0])) if int(round(bbox[0])) > 0 else 0
+    x2 = int(round(bbox[2])) if int(round(bbox[2])) > 0 else 0
 
-    #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
-    cbcr = np.column_stack((cbcr[0], cbcr[1]))
-    # for row in range(np.shape(cbcr)[0]):
-    #     xdiff = cbcr[row] - mean
-    #     p = np.exp(-0.5 * np.dot(np.dot(xdiff, covinv), xdiff.T)) / (2 * np.pi * np.power(covdet, 0.5))
-    #     probabilitys.append(p)
-    probabilitys = list(multivariate_normal.pdf(cbcr, mean = mean, cov=cov))
-
-    test_show_gaussion_probability(probabilitys)
+    crop_image = image[y1:y2, x1:x2]
+    return crop_image
 
 # 生成二维数组[[cb,cb,cb,cb,....], [cr,cr,cr,cr,cr,...]]
-def resize_image_shape(image):
-    _, cr, cb = cv2.split(image)
+def image_reshape(image):
+    img_ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
+
+    _, cr, cb = cv2.split(img_ycrcb)
     crravel = cr.ravel()
     cbravel = cb.ravel()
     cbcr = np.vstack((cbravel, crravel))
@@ -414,11 +414,11 @@ def ROI(image, bbox):
     x2 = bbox[2] - left_point_x 
     y2 = right_ear[1] - bbox[1] 
 
-    cv2.rectangle(img, (0,0), (int(x1), int(y1)), (0,0,255))
-    cv2.rectangle(img, (int(x2),0), (img.shape[1], int(y2)), (0,0,255))
-    print("img shape:",img.shape)
-    cv2.imshow("ROI",img)
-    cv2.waitKey(0) & 0xFF == ord('q')
+    # cv2.rectangle(img, (0,0), (int(x1), int(y1)), (0,0,255))
+    # cv2.rectangle(img, (int(x2),0), (img.shape[1], int(y2)), (0,0,255))
+    # print("img shape:",img.shape)
+    # cv2.imshow("ROI",img)
+    # cv2.waitKey(0) & 0xFF == ord('q')
     return ([x1,y1,x2,y2],img)
 
 def is_outside_of_circle(point, circle, radius):
@@ -585,24 +585,49 @@ def test_show_landmark_modify_area(image, landmark):
             break
     cv2.imshow("landmarl", image)
     cv2.waitKey(0) & 0xFF == ord('q')
-    
-def test_show_gaussion_probability(probabilitys):
-    t1 = time.time()
-    n, bins, patchs = plt.hist(probabilitys, bins=30)
 
-    sumn = np.sum(n)
-    count = 0
-    for i in range(len(n)):
-        pro = float((n[i]+count)/sumn)
-        # print("%.4f:%d:%.2f"%(bins[i], n[i], pro))
-        if pro >= 0.3 and pro <= 0.35:
-            global possibly
-            possibly = bins[i] 
-            # print("possibly:", possibly)
+# 查找数组中大于特定百分比的数值
+# def find_gaussion_probability_threshold(probabilitys):
+#     t1 = time.time()
+#     n, bins, _ = plt.hist(probabilitys, bins=30)
+    
+#     # global possibly
+#     # possibly = bins[1]
+#     # print("possibly:", possibly)
+#     sumn = np.sum(n)
+#     count = 0
+#     for i in range(len(n)):
+#         pro = float((n[i]+count)/sumn)
+#         print("%.4f:%d:%.2f"%(bins[i], n[i], pro))
+#         if pro >= 0.3 and pro <= 0.35:
+#             global possibly
+#             possibly = bins[i] 
+#             print("possibly:", possibly)
+#             break
+#         count += n[i]
+#     print("gaussion_probability cost time:", time.time() - t1)
+#     # plt.show()
+
+# 查找数组中大于特定百分比的数值
+def find_gaussion_probability_threshold(pdfs):
+    t1 = time.time()
+    pdfs.sort()
+    length = len(pdfs)
+    right = len(pdfs) - 1
+    left = 0
+    while left <= right:
+        mid = (right + left) / 2
+        rate = float(len(pdfs[pdfs >= pdfs[mid]])) / length
+        if rate >= 0.7 and rate <= 0.71:
             break
-        count += n[i]
-    # print("gaussion_probability cost time:", time.time() - t1)
-    # plt.show()
+        else:
+            if rate < 0.7:
+                right = mid -1
+            else:
+                left = mid + 1
+    t2 = time.time()
+    print("find_gaussion_probability_threshold cost time:%f"%(t2-t1))        
+    return pdfs[mid]
 
 #测试显示需要去除的特征点位置
 def test_show_remove_landmark_piexl(image, landmark):
