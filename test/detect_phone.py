@@ -20,12 +20,14 @@ def main():
     
     mtcnn_detector = mtcnn_detector_init()
 
+    (clf, mean, eigVects) = svm_classification_init()
+
     # videopath = "./video_test.avi"
     video_capture = cv2.VideoCapture(0)  #捕获摄像头
     video_capture.set(3, 340)
     video_capture.set(4, 480)
     corpbbox = None
-    
+
     while True:
         # fps = video_capture.get(cv2.CAP_PROP_FPS)
         t1 = cv2.getTickCount()
@@ -34,16 +36,27 @@ def main():
             image = np.array(frame)
             boxes_c,landmarks = mtcnn_detector.detect(image)
             
-            print(landmarks.shape)
-            t2 = cv2.getTickCount()
-            t = (t2 - t1) / cv2.getTickFrequency()
-            fps = 1.0 / t
-            
+            if len(boxes_c) == 0:
+                continue
 
+            gray = skinDetect(image, boxes_c[0], landmarks[0])
+
+            # HOG 
+            fd = hog_feature(gray)
+            
+            feature = fd.reshape((1, -1))
+            feature = feature - mean
+            feature = feature * eigVects
+            
+            result = clf.predict(feature) 
+            if int(result) == 1:
+                cv2.circle(frame, (20,20), 10, (0,0,255), -1) 
+            else:
+                cv2.circle(frame, (20,20), 10, (0,255,0), -1)
 
             # time end
             cv2.imshow("", frame)
-            if cv2.waitKey(0) & 0xFF == ord('q'):
+            if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         else:
             print('device not find')
@@ -81,6 +94,19 @@ def mtcnn_detector_init():
                                 stride=stride, threshold=thresh, slide_window=slide_window)
 
     return mtcnn_detector
+
+def svm_classification_init():
+    n = 100
+    m = '20pixel'  
+    model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,n)
+
+    meanVal = joblib.load('./features/PCA/%s/meanVal_train_%s.mean' %(m,m)) 
+    n_eigVects = joblib.load('./features/PCA/%s/n_eigVects_train_%s_%s.eig' %(m,m,n))  
+
+    # SVM 分类器
+    clf = joblib.load(model_path)
+
+    return (clf, meanVal, n_eigVects)
 
 ##################################################
 #自适应肤色检测，根据面部肤色区域，计算均值 & 协方差矩阵
@@ -228,6 +254,26 @@ def single_gaussian_model(image, position, mean, cov):
     # cv2.waitKey(0) & 0xFF == ord('q')
     return  img_gray  
 
+def find_gaussion_probability_threshold(pdfs):
+    t1 = time.time()
+    pdfs.sort()
+    length = len(pdfs)
+    right = len(pdfs) - 1
+    left = 0
+    while left <= right:
+        mid = (right + left) / 2
+        rate = float(len(pdfs[pdfs >= pdfs[mid]])) / length
+        if rate >= 0.7 and rate <= 0.71:
+            break
+        else:
+            if rate < 0.7:
+                right = mid -1
+            else:
+                left = mid + 1
+    t2 = time.time()
+    print("find_gaussion_probability_threshold cost time:%f"%(t2-t1))        
+    return pdfs[mid]
+
 #计算耳部区域
 #params  face_box: 脸部矩形区域，包含左上角点坐标和右下角点坐标
 def cal_ear_area_pt(face_box):
@@ -327,7 +373,11 @@ def open_operation(image):
     return img
 
 
-def show_face_ear_area(boxes_c, landmarks):
+def show_face_ear_area(frame, boxes_c, landmarks):
+
+    # t2 = cv2.getTickCount()
+    # t = (t2 - t1) / cv2.getTickFrequency()
+    # fps = 1.0 / t
 
     #人脸区域
     for i in range(boxes_c.shape[0]):
@@ -340,8 +390,8 @@ def show_face_ear_area(boxes_c, landmarks):
         cv2.putText(frame, '{:.3f}'.format(score), (corpbbox[0], corpbbox[1] - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (0, 0, 255), 2)
     #帧率
-    cv2.putText(frame, '{:.4f}'.format(t) + " " + '{:.3f}'.format(fps), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                (255, 0, 255), 2)
+    # cv2.putText(frame, '{:.4f}'.format(t) + " " + '{:.3f}'.format(fps), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+    #             (255, 0, 255), 2)
     #人脸特征点区域
     for i in range(landmarks.shape[0]):
         for j in range(len(landmarks[i])/2):
