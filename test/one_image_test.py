@@ -26,75 +26,65 @@ dimension = 100     # this is to define how dimentions u want for PCA
 possibly = 0.0
 
 def main():
-    # test_svm_classification()
-    path = "tel"
-    count = 0
-    fds = []
-    labels = []
+    test_svm_classification()
+    # paths = ["positive_gray", "negative_gray"]
+    # count = 0
+    # fds = []
+    # labels = []
 
-    # MTCNN检测器
-    mtcnn_detector = mtcnn_detector_init()    
+    # # MTCNN检测器
+    # mtcnn_detector = mtcnn_detector_init()    
    
-    num = 148
-    for item in os.listdir(path):
-        if item[0] == '.':
-            continue
+    # num = 0
+    # for path in paths:
+    #     for item in os.listdir(path):
+    #         if item[0] == '.':
+    #             continue
 
-        imagepath = os.path.join(path,item)
-        test_data = TestLoader([imagepath])
+    #         imagepath = os.path.join(path,item)
+    #         # test_data = TestLoader([imagepath])
 
-        all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
-        if len(all_boxes[0]) == 0:
-            continue
+    #         # all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+    #         # if len(all_boxes[0]) == 0:
+    #         #     continue
 
-        t1 = time.time()
-        print("%d Dealing with %s"%(num,imagepath))
-        image = cv2.imread(imagepath)
+    #         t1 = time.time()
+    #         print("%d Dealing with %s"%(num,imagepath))
+    #         image = cv2.imread(imagepath)
 
-        # img = crop_image(image, all_boxes[count][0], num)
-        #Skin Detection
-        gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
-        t2 = time.time()
+    #         # img = crop_image(image, all_boxes[count][0], num)
+    #         #Skin Detection
+    #         # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+            
+    #         # cv2.imwrite("resize/img_1000%d.jpg"%(num), img)
+            
+    #         # HOG 
+    #         fd = hog_feature(image)
+    #         fds.append(fd)
+    #         if cmp(path, "positive_gray") == 0:
+    #             labels.append(1.0)
+    #         else:
+    #             labels.append(0.0)
+            
+    #         t2 = time.time()
+    #         print("total cost time:%f"%(t2 - t1))
 
-        print("total cost time:%f"%(t2 - t1))
-        # cv2.imwrite("resize/img_%d.jpg"%(num), img)
-        # HOG 
-        # fd = hog_feature(image)
-        # fds.append(fd)
-        # if cmp(path, "positive") == 0:
-        #     print("true")
-        #     labels.append(1.0)
-        # else:
-        #     labels.append(0.0)
+    #         num += 1
+    #         # cv2.imshow("lala",image)
+    #         # if cv2.waitKey(0) & 0xFF == ord('q'):
+    #         #     continue
 
-        num += 1
-        # cv2.imshow("lala",image)
-        # if cv2.waitKey(0) & 0xFF == ord('q'):
-        #     continue
+
+    # # # PCA 降维 
+    # print("fds shape")
+    # fds = np.array(fds)
+    # print("type: %s  shape:%s"%(type(fds), fds.shape))
+    # print(fds)
+    # fds = pca_feature(fds)
+
+    # # SVM Classification  
+    # svm_classification(fds, labels)
     
-
-
-#------------------------PCA--------------------------------------------------   
-#     print("fds shape")
-#     fds = np.array(fds)
-#     print("type: %s  shape:%s"%(type(fds), fds.shape))
-#     print(fds)
-#     fds = pca_feature(fds)
-
-#     t0 = time.time()  
-#------------------------SVM--------------------------------------------------   
-#     model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
-
-#     clf = ssv.SVC(kernel='rbf')   
-#     print "Training a SVM Classifier."   
-#     print("fds type: %s  shape:%s"%(type(fds), fds.shape))
-#     # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
-#     clf.fit(fds, labels)   
-#     joblib.dump(clf, model_path)  
-  
-#     t1 = time.time()   
-#     print "Classifier saved to {}".format(model_path)   
-#     print 'The cast of time is :%f seconds' % (t1-t0) 
 
 
 ##################################################
@@ -215,6 +205,25 @@ def pca_feature(features, dimension = 100):
     
     return lowDDataMat 
 
+##################################################
+# PCA降维之后的HOG特征作为输入，采用SVM分类
+##################################################
+def svm_classification(features, labels):
+    t0 = time.time()
+
+    model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
+    clf = ssv.SVC(kernel='linear')   
+    print "Training a SVM Classifier."   
+    print("fds type: %s  shape:%s"%(type(features), features.shape))
+    # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
+    clf.fit(features, labels)   
+    joblib.dump(clf, model_path)  
+  
+    t1 = time.time()   
+    print "Classifier saved to {}".format(model_path)   
+    print 'The cast of time is :%f seconds' % (t1-t0) 
+
+
 def zeroMean(dataMat): # zero normalisation
     meanVal=np.mean(dataMat,axis=0) # calculate mean value of every column.   
     joblib.dump(meanVal,'./features/PCA/%s/meanVal_train_%s.mean' %(m,m)) # save mean value   
@@ -264,7 +273,7 @@ def face_single_gaussian_model(cbcr, mean, cov):
     #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
     cbcr = np.column_stack((cbcr[0], cbcr[1]))
 
-    pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov)
+    pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov, allow_singular=True)
 
     global possibly
     possibly = find_gaussion_probability_threshold(pdfs)
@@ -278,7 +287,7 @@ def single_gaussian_model(image, position, mean, cov):
     cbcr = np.column_stack((cbcr[0], cbcr[1]))
 
     #计算高斯概率密度分布
-    pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov)
+    pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov, allow_singular=True)
     pdfs[pdfs >= possibly] = 255    #矩阵元素大于阈值设置为白色
     pdfs[pdfs < possibly] = 0       #矩阵小雨阈值设置为黑色
 
@@ -474,11 +483,11 @@ def crop_image(image, bbox, num):
     width = bbox[2] - bbox[0]
     height = bbox[3] - bbox[1]
 
-    left_point_x = int(round(bbox[0] - width * 1.0)) if int(round(bbox[0] - width * 1.5)) > 0 else 0
-    right_point_x = int(round(bbox[2] + width * 1.0)) if int(round(bbox[2] + width * 1.5)) < image.shape[1] else image.shape[1]
+    left_point_x = int(round(bbox[0] - width)) if int(round(bbox[0] - width)) > 0 else 0
+    right_point_x = int(round(bbox[2] + width)) if int(round(bbox[2] + width)) < image.shape[1] else image.shape[1]
 
-    left_point_y = int(round(bbox[1] - height)) if int(round(bbox[1] - height)) > 0 else 0
-    right_point_y = int(round(bbox[3] + height * 1.5 )) if int(round(bbox[3] + height * 2 )) < image.shape[0] else image.shape[0]
+    left_point_y = int(round(bbox[1] - height * 0.5)) if int(round(bbox[1] - height * 0.5)) > 0 else 0
+    right_point_y = int(round(bbox[3] + height * 1.3 )) if int(round(bbox[3] + height * 1.3)) < image.shape[0] else image.shape[0]
 
     crop = image[left_point_y:right_point_y, left_point_x : right_point_x]
 
