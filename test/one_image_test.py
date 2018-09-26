@@ -27,47 +27,48 @@ possibly = 0.0
 
 def main():
     test_svm_classification()
-    # paths = ["positive_gray", "negative_gray"]
+    # paths = ["test_positive", "test_negative"]
     # count = 0
     # fds = []
     # labels = []
 
     # # MTCNN检测器
     # mtcnn_detector = mtcnn_detector_init()    
-   
+    # t0 = time.time()
     # num = 0
     # for path in paths:
     #     for item in os.listdir(path):
     #         if item[0] == '.':
     #             continue
-
-    #         imagepath = os.path.join(path,item)
-    #         # test_data = TestLoader([imagepath])
-
-    #         # all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
-    #         # if len(all_boxes[0]) == 0:
-    #         #     continue
-
     #         t1 = time.time()
+    #         imagepath = os.path.join(path,item)
     #         print("%d Dealing with %s"%(num,imagepath))
-    #         image = cv2.imread(imagepath)
 
-    #         # img = crop_image(image, all_boxes[count][0], num)
-    #         #Skin Detection
-    #         # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
-            
-    #         # cv2.imwrite("resize/img_1000%d.jpg"%(num), img)
-            
-    #         # HOG 
-    #         fd = hog_feature(image)
-    #         fds.append(fd)
-    #         if cmp(path, "positive_gray") == 0:
-    #             labels.append(1.0)
-    #         else:
-    #             labels.append(0.0)
+    #         test_data = TestLoader([imagepath])
+    #         all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+    #         if len(all_boxes[0]) == 0:
+    #             continue
             
     #         t2 = time.time()
-    #         print("total cost time:%f"%(t2 - t1))
+    #         print("mtcnn_detector cost time %f"%(t2-t1))
+            
+    #         image = cv2.imread(imagepath)
+
+    #         img = crop_image(image, all_boxes[0][0])
+    #         #Skin Detection
+    #         # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
+    #         cv2.imwrite("resize/img_2000%d.jpg"%(num), img)
+            
+    #         # HOG 
+    #         # fd = hog_feature(gray)
+    #         # fds.append(fd)
+    #         # if cmp(path, "positive") == 0:
+    #         #     labels.append(1.0)
+    #         # else:
+    #         #     labels.append(0.0)
+            
+    #         # t3 = time.time()
+    #         # print("one image cost time:%f"%(t3 - t1))
 
     #         num += 1
     #         # cv2.imshow("lala",image)
@@ -75,7 +76,7 @@ def main():
     #         #     continue
 
 
-    # # # PCA 降维 
+    # PCA 降维 
     # print("fds shape")
     # fds = np.array(fds)
     # print("type: %s  shape:%s"%(type(fds), fds.shape))
@@ -84,7 +85,8 @@ def main():
 
     # # SVM Classification  
     # svm_classification(fds, labels)
-    
+    # t4 = time.time()
+    # print("total cost time:%f"%(t4 - t0))
 
 
 ##################################################
@@ -135,7 +137,7 @@ def skinDetect(image, bbox, landmark):
     
     #YCbCr 生成二维数组[[cb,cb,cb,cb,....], [cr,cr,cr,cr,cr,...]]
     cbcr = image_reshape(crop_image)
-
+    # test_show_skin_piexl(cbcr[0], cbcr[1], 'b')
     #调整五个特征点相对人脸的位置(之前是相对裁剪之前图片的位置)
     # landmark = landmark_relative(bbox, landmark)
 
@@ -191,8 +193,8 @@ def pca_feature(features, dimension = 100):
     covMat=np.cov(newData,rowvar=0)   
     eigVals,eigVects=np.linalg.eig(np.mat(covMat)) # calculate feature value and feature vector   
     
-    joblib.dump(eigVals,'./features/PCA/%s/eigVals_train_%s.eig' %(m,m),compress=3)    
-    joblib.dump(eigVects,'./features/PCA/%s/eigVects_train_%s.eig' %(m,m),compress=3)  
+    # joblib.dump(eigVals,'./features/PCA/%s/eigVals_train_%s.eig' %(m,m),compress=3)    
+    # joblib.dump(eigVects,'./features/PCA/%s/eigVects_train_%s.eig' %(m,m),compress=3)  
 
     eigValIndice=np.argsort(eigVals) # sort feature value
     n_eigValIndice=eigValIndice[-1:-(dimension+1):-1] # take n feature value   
@@ -235,7 +237,7 @@ def zeroMean(dataMat): # zero normalisation
 ##################################################
 def mean(cbcr):
     cbcr_mean = np.mean(cbcr, axis=1)
-    # print("cbcr_mean:", cbcr_mean)
+    print("cbcr_mean:", cbcr_mean)
     return cbcr_mean
 
 ##################################################
@@ -243,7 +245,7 @@ def mean(cbcr):
 ##################################################
 def covariance_matrix(cbcr):
     cbcr_cov = np.cov(cbcr)
-    # print("cbcr_cov:", cbcr_cov)
+    print("cbcr_cov:", cbcr_cov)
     return cbcr_cov
 
 
@@ -269,16 +271,17 @@ def covariance_matrix(cbcr):
 
 
 def face_single_gaussian_model(cbcr, mean, cov):
-    t1 = time.time()
+    # t1 = time.time()
     #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
     cbcr = np.column_stack((cbcr[0], cbcr[1]))
 
     pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov, allow_singular=True)
-
+    # test_show_gaussion_histogram(pdfs, mean, cov)
     global possibly
     possibly = find_gaussion_probability_threshold(pdfs)
-    t2 = time.time()
-    print("face_single_gaussian_model cost time:%f"%(t2-t1)) 
+ 
+    # t2 = time.time()
+    # print("face_single_gaussian_model cost time:%f"%(t2-t1)) 
 
 def single_gaussian_model(image, position, mean, cov):
     
@@ -288,12 +291,18 @@ def single_gaussian_model(image, position, mean, cov):
 
     #计算高斯概率密度分布
     pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov, allow_singular=True)
+    # test_show_guaussion_3d(image, pdfs.reshape(image.shape[0], image.shape[1]))
+
     pdfs[pdfs >= possibly] = 255    #矩阵元素大于阈值设置为白色
-    pdfs[pdfs < possibly] = 0       #矩阵小雨阈值设置为黑色
+    pdfs[pdfs < possibly] = 0       #矩阵小于阈值设置为黑色
 
     img_gray = pdfs.reshape(image.shape[0], image.shape[1])
-    
+    # cv2.imshow("gray",img_gray)
+    # cv2.waitKey(0) & 0xFF == ord('q')
+
     img_gray = close_operation(img_gray)
+
+    
     # cv2.imshow("gray",img_gray)
     # cv2.waitKey(0) & 0xFF == ord('q')
     return  img_gray  
@@ -384,20 +393,20 @@ def cal_ear_area_pt(face_box):
 	face_width = face_right_down_pt[0] - face_left_up_pt[0]
 
 	ear_height = 1.1 * face_height
-	ear_width = 0.6 * face_width
+	ear_width = 1.0 * face_width
 
 	#左耳朵区域，左上角和右下角坐标
 	ear_left_pt = []
-	ear_left_pt.append(face_left_up_pt[0] - 0.5 * face_width)
+	ear_left_pt.append(face_left_up_pt[0] - 0.7 * face_width)
 	ear_left_pt.append(face_left_up_pt[1] + 0.3 * face_height)
-	ear_left_pt.append(ear_left_pt[0] + 0.6 * face_width)
+	ear_left_pt.append(ear_left_pt[0] + 0.8 * face_width)
 	ear_left_pt.append(ear_left_pt[1] + 1.1 * face_height)
 
 	#右耳朵区域，左上角和右下角坐标
 	ear_right_pt = []
 	ear_right_pt.append(face_left_up_pt[0] + 0.9 * face_width)   
 	ear_right_pt.append(face_left_up_pt[1] + 0.3 * face_height)
-	ear_right_pt.append(ear_right_pt[0] + 0.6 * face_width)
+	ear_right_pt.append(ear_right_pt[0] + 0.8 * face_width)
 	ear_right_pt.append(ear_right_pt[1] + 1.1 * face_height)
 
 	return [ear_left_pt, ear_right_pt]
@@ -478,7 +487,7 @@ def open_operation(image):
     img = cv2.morphologyEx(image, cv2.MORPH_OPEN, kernel)
     return img
     
-def crop_image(image, bbox, num):
+def crop_image(image, bbox):
     
     width = bbox[2] - bbox[0]
     height = bbox[3] - bbox[1]
@@ -487,7 +496,7 @@ def crop_image(image, bbox, num):
     right_point_x = int(round(bbox[2] + width)) if int(round(bbox[2] + width)) < image.shape[1] else image.shape[1]
 
     left_point_y = int(round(bbox[1] - height * 0.5)) if int(round(bbox[1] - height * 0.5)) > 0 else 0
-    right_point_y = int(round(bbox[3] + height * 1.3 )) if int(round(bbox[3] + height * 1.3)) < image.shape[0] else image.shape[0]
+    right_point_y = int(round(bbox[3] + height * 1.2 )) if int(round(bbox[3] + height * 1.2)) < image.shape[0] else image.shape[0]
 
     crop = image[left_point_y:right_point_y, left_point_x : right_point_x]
 
@@ -513,6 +522,7 @@ def test_svm_classification():
 
     num = 0
     total = 0
+    t0 = time.time()
     for path in paths:
         lable = 1 if cmp(path, "test_positive") == 0 else 0
         for item in os.listdir(path):
@@ -547,13 +557,15 @@ def test_svm_classification():
             # if cv2.waitKey(0) & 0xFF == ord('q'):
             #     continue
     rate = float(num) / total
+    t1 = time.time()
     print 'The classification accuracy is %f' %rate 
+    print("Total time cost is %f"%(t1 - t0))
 
 def test_show_face_area(image, all_boxes):
     for bbox in all_boxes[0]:
         # skinDetect(image, bbox)
-        cv2.putText(image,str(np.round(bbox[4],2)),(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
-        cv2.rectangle(image, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255))
+        cv2.putText(image,'face',(int(bbox[0]),int(bbox[1])),cv2.FONT_HERSHEY_TRIPLEX,1,color=(255,0,255))
+        cv2.rectangle(image, (int(bbox[0]),int(bbox[1])),(int(bbox[2]),int(bbox[3])),(0,0,255), 4)
 
 
 def test_show_landmark_area(image, landmarks):
@@ -562,6 +574,13 @@ def test_show_landmark_area(image, landmarks):
             # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
             cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
 
+def test_show_ear_area(image, all_boxes):
+    for bbox in all_boxes[0]:
+        ear_bboxs = cal_ear_area_pt(bbox)
+        for j in ear_bboxs:
+            corpbbox = [int(j[0]), int(j[1]), int(j[2]), int(j[3])]
+            cv2.rectangle(image, (corpbbox[0], corpbbox[1]),
+                    (corpbbox[2], corpbbox[3]), (0, 0, 255), 4)
 
 def test_show_landmark_point(image, landmark):
     for i in range(len(landmark)/2):
@@ -661,9 +680,37 @@ def test_show_skin_piexl(x1, y1, color1):
     fig = plt.figure(figsize=(8,5))
     plt.scatter(x1, y1, c = color1)
 
+    plt.xlim([0, 255])
+    plt.ylim([0, 255])
+    plt.show()
 
-    plt.xlim([60, 150])
-    plt.ylim([90, 180])
+def test_show_guaussion_3d(image,z):
+    import mpl_toolkits.mplot3d
+
+    img_ycrcb = cv2.cvtColor(image, cv2.COLOR_BGR2YCrCb)
+
+    _, x, y = cv2.split(img_ycrcb)
+
+    ax = plt.subplot(111, projection='3d')
+    ax.plot_surface(x, y, z, rstride=1, cstride=1, cmap='rainbow', alpha=0.9)#绘面
+
+    # cset = ax.contour(x,y,z,10,zdir='z',offset = 125,cmap='coolwarm')
+    # cset = ax.contour(x, y, z, zdir='x', offset = 0,cmap='winter')
+    # cset = ax.contour(x, y, z, zdir='y', offset =255,cmap= 'winter')
+
+    ax.set_xlabel('cb')
+    ax.set_ylabel('cr')
+    ax.set_zlabel('Probability')
+    plt.show()
+
+def test_show_gaussion_histogram(pdfs, mean, cov, num_bins = 50):
+    n, bins, patches = plt.hist(pdfs, num_bins, normed=True, facecolor = 'b', alpha = 0.9)
+
+    plt.xlabel('Probability')
+    plt.ylabel('Numbers')
+    np.set_printoptions(precision = 2)
+    title = 'histogram: mean={}'.format(mean),'cov=[{}'.format(cov[0]),'{}]'.format(cov[1])
+    plt.title(title)
     plt.show()
 
 if __name__ == "__main__":

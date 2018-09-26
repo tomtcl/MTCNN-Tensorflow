@@ -31,8 +31,10 @@ def _get_output_filename(output_dir, name, net):
     #st = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
     #return '%s/%s_%s_%s.tfrecord' % (output_dir, name, net, st)
     #return '%s/train_PNet_landmark.tfrecord' % (output_dir)
-    return '%s/landmark_landmark.tfrecord' % (output_dir)
-    
+    return '%s/landmark_landmark.tfrecord' % (output_dir)    	#if you want to generate landmark_landmark tfrecord,uncomment this line.
+    #return '%s/pos_landmark.tfrecord' % (output_dir)	      #if you want to generate pos_landmark tfrecord,uncomment this line.
+    #return '%s/neg_landmark.tfrecord' % (output_dir)	      #if you want to generate neg_landmark tfrecord,uncomment this line.
+    # return '%s/part_landmark.tfrecord' % (output_dir)	      #if you want to generate part_landmark tfrecord,uncomment this line.
 
 def run(dataset_dir, net, output_dir, name='MTCNN', shuffling=False):
     """Runs the conversion operation.

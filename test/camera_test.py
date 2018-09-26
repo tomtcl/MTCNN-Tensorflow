@@ -25,7 +25,7 @@ RNet = Detector(R_Net, 24, 1, model_path[1])
 detectors[1] = RNet
 ONet = Detector(O_Net, 48, 1, model_path[2])
 detectors[2] = ONet
-videopath = "./video_test.avi"
+videopath = "./13025123.mp4"
 mtcnn_detector = MtcnnDetector(detectors=detectors, min_face_size=min_face_size,
                                stride=stride, threshold=thresh, slide_window=slide_window)
 

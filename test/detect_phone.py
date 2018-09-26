@@ -14,33 +14,47 @@ import sklearn.svm as ssv
 from sklearn.externals import joblib  
 from scipy.stats import multivariate_normal
 import time
+from enum import Enum
 
 
 def main():
-    
+    is_set_buffer_len = False
+    # MTCNN 人脸检测器
     mtcnn_detector = mtcnn_detector_init()
 
+    # SVM 检测器
     (clf, mean, eigVects) = svm_classification_init()
 
-    # videopath = "./video_test.avi"
-    video_capture = cv2.VideoCapture(0)  #捕获摄像头
-    video_capture.set(3, 340)
-    video_capture.set(4, 480)
-    corpbbox = None
+     # 打电话行为检测器
+    behavior_detector = behavior_detection()
 
+    videopath = "./13025123.mp4"
+    video_capture = cv2.VideoCapture(videopath)  #捕获摄像头
+    video_capture.set(3, 320)
+    video_capture.set(4, 480)
+    
     while True:
         # fps = video_capture.get(cv2.CAP_PROP_FPS)
+        t3 = time.time()
         t1 = cv2.getTickCount()
         ret, frame = video_capture.read()
         if ret:
             image = np.array(frame)
+         
             boxes_c,landmarks = mtcnn_detector.detect(image)
-            
+            t4 = time.time()
+            # print("mtcnn_detector frame cost time:%f"%(t4-t3))
+
             if len(boxes_c) == 0:
+                behavior_detector.detect(frame, 0)
+                cv2.imshow("", frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
                 continue
 
             gray = skinDetect(image, boxes_c[0], landmarks[0])
-
+            t5 = time.time()
+            # print("skinDetect frame cost time:%f"%(t5-t4))
             # HOG 
             fd = hog_feature(gray)
             
@@ -48,13 +62,26 @@ def main():
             feature = feature - mean
             feature = feature * eigVects
             
-            result = clf.predict(feature) 
-            if int(result) == 1:
-                cv2.circle(frame, (20,20), 10, (0,0,255), -1) 
-            else:
-                cv2.circle(frame, (20,20), 10, (0,255,0), -1)
+            t2 = cv2.getTickCount()
+            t = (t2 - t1) / cv2.getTickFrequency()
+            fps = 1.0 / t
+            if is_set_buffer_len == False:
+                is_set_buffer_len = True
+                behavior_detector.init_duration(fps)
+            #帧率
+            cv2.putText(frame, '{:.4f}'.format(t) + " " + '{:.3f}'.format(fps), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (255, 0, 255), 2)
 
+
+            result = clf.predict(feature) 
+            behavior_detector.detect(frame, int(result))
+                    
+            t6 = time.time()
+            # print("one frame cost time:%f"%(t6-t3))
             # time end
+            cv2.imshow("gray", gray)
+
+            show_face_ear_area(frame, boxes_c, landmarks)
             cv2.imshow("", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -95,6 +122,9 @@ def mtcnn_detector_init():
 
     return mtcnn_detector
 
+##################################################
+# SVM 检测器
+##################################################
 def svm_classification_init():
     n = 100
     m = '20pixel'  
@@ -113,7 +143,7 @@ def svm_classification_init():
 #高斯模型概率密度分布
 ##################################################
 def skinDetect(image, bbox, landmark):
-    t1 = time.time()
+    # t1 = time.time()
     #裁剪出脸部区域
     crop_image = face_image(image, bbox)
     
@@ -139,7 +169,7 @@ def skinDetect(image, bbox, landmark):
     gray = single_gaussian_model(roi_image, position, cbcr_mean, cbcr_cov)
 
     t2 = time.time()
-    print("skinDetect cost time:%f"%(t2 - t1))
+    # print("skinDetect cost time:%f"%(t2 - t1))
     return gray
 
 ##################################################
@@ -153,8 +183,6 @@ def hog_feature(image):
     orientations = 9  
 
     fd = hog(image, orientations, pixels_per_cell, cells_per_block, block_norm, visualize)
-    print(fd)
-
     return fd
 
 ##################################################
@@ -225,7 +253,7 @@ def covariance_matrix(cbcr):
 
 
 def face_single_gaussian_model(cbcr, mean, cov):
-    t1 = time.time()
+    # t1 = time.time()
     #---生成数组[[cb,cr], [cb,cr] ... [cb,cr] ]
     cbcr = np.column_stack((cbcr[0], cbcr[1]))
 
@@ -234,7 +262,7 @@ def face_single_gaussian_model(cbcr, mean, cov):
     global possibly
     possibly = find_gaussion_probability_threshold(pdfs)
     t2 = time.time()
-    print("face_single_gaussian_model cost time:%f"%(t2-t1)) 
+    # print("face_single_gaussian_model cost time:%f"%(t2-t1)) 
 
 def single_gaussian_model(image, position, mean, cov):
     
@@ -244,6 +272,7 @@ def single_gaussian_model(image, position, mean, cov):
 
     #计算高斯概率密度分布
     pdfs = multivariate_normal.pdf(cbcr, mean = mean, cov=cov, allow_singular=True)
+    
     pdfs[pdfs >= possibly] = 255    #矩阵元素大于阈值设置为白色
     pdfs[pdfs < possibly] = 0       #矩阵小雨阈值设置为黑色
 
@@ -255,7 +284,7 @@ def single_gaussian_model(image, position, mean, cov):
     return  img_gray  
 
 def find_gaussion_probability_threshold(pdfs):
-    t1 = time.time()
+    # t1 = time.time()
     pdfs.sort()
     length = len(pdfs)
     right = len(pdfs) - 1
@@ -271,7 +300,7 @@ def find_gaussion_probability_threshold(pdfs):
             else:
                 left = mid + 1
     t2 = time.time()
-    print("find_gaussion_probability_threshold cost time:%f"%(t2-t1))        
+    # print("find_gaussion_probability_threshold cost time:%f"%(t2-t1))        
     return pdfs[mid]
 
 #计算耳部区域
@@ -279,7 +308,7 @@ def find_gaussion_probability_threshold(pdfs):
 def cal_ear_area_pt(face_box):
 	assert len(face_box) > 3, "face box len error"
 
-	#左上角坐标
+		#左上角坐标
 	face_left_up_pt = face_box[:2]
 
 	#右下角坐标
@@ -289,20 +318,20 @@ def cal_ear_area_pt(face_box):
 	face_width = face_right_down_pt[0] - face_left_up_pt[0]
 
 	ear_height = 1.1 * face_height
-	ear_width = 0.6 * face_width
+	ear_width = 1.0 * face_width
 
 	#左耳朵区域，左上角和右下角坐标
 	ear_left_pt = []
-	ear_left_pt.append(face_left_up_pt[0] - 0.5 * face_width)
+	ear_left_pt.append(face_left_up_pt[0] - 0.7 * face_width)
 	ear_left_pt.append(face_left_up_pt[1] + 0.3 * face_height)
-	ear_left_pt.append(ear_left_pt[0] + 0.6 * face_width)
+	ear_left_pt.append(ear_left_pt[0] + 0.8 * face_width)
 	ear_left_pt.append(ear_left_pt[1] + 1.1 * face_height)
 
 	#右耳朵区域，左上角和右下角坐标
 	ear_right_pt = []
 	ear_right_pt.append(face_left_up_pt[0] + 0.9 * face_width)   
 	ear_right_pt.append(face_left_up_pt[1] + 0.3 * face_height)
-	ear_right_pt.append(ear_right_pt[0] + 0.6 * face_width)
+	ear_right_pt.append(ear_right_pt[0] + 0.8 * face_width)
 	ear_right_pt.append(ear_right_pt[1] + 1.1 * face_height)
 
 	return [ear_left_pt, ear_right_pt]
@@ -373,6 +402,99 @@ def open_operation(image):
     return img
 
 
+class behavior_detection(object):
+    LaunchModeDuration = 30        #开始模式缓存帧数
+    RealtimeModeDuration = 8       #实时模式
+    ExitModeDuration = 8           #退出模式
+
+    LaunchAlarmThreshold = 0.60
+    RealAlarmThreshold = 0.55
+    ExitAlarmThreshold = 0.50
+
+    def __init__(self):
+        self.state = RunState.Launch
+        self.buffer = [[],[],[]]
+        self.index = 0
+        self.isMakingPhone = False
+
+    def init_duration(self, fps):
+        self.LaunchModeDuration = int(2.5 * fps)
+        self.RealtimeModeDuration = int(1 * fps)
+        self.ExitModeDuration = int(1 * fps)
+
+    def detect(self, frame, value):
+        launchBuffer = self.buffer[0]        #开始模式缓存Frame判别结果Buffer
+        realTimeBuffer = self.buffer[1]      #实时模式
+        exitBuffer = self.buffer[2]          #退出模式
+        isStateChanged = False
+
+        self.isMakingPhone = False
+        duration = [self.LaunchModeDuration, self.RealtimeModeDuration, self.ExitModeDuration]
+        if self.state == RunState.Launch: #开始模式
+            if self.index >= len(launchBuffer):
+                launchBuffer.append(value)
+            else:
+                launchBuffer[self.index] = value
+            
+            if len(launchBuffer) == duration[self.state.value]:
+                if (float(sum(launchBuffer)) / duration[self.state.value]) >= self.LaunchAlarmThreshold:
+                    self.isMakingPhone = True
+                    isStateChanged = True
+                    self.state = RunState.Real
+                    self.index = 0
+                    del realTimeBuffer[:]
+
+            print("launchBuffer len:%d  sum:%d"%(len(launchBuffer), sum(launchBuffer)))
+        elif self.state == RunState.Real:
+            self.isMakingPhone = True
+            if self.index >= len(realTimeBuffer):
+                realTimeBuffer.append(value)
+            else:
+                realTimeBuffer[self.index] = value
+            
+            if len(realTimeBuffer) == duration[self.state.value]:
+                if (float(sum(realTimeBuffer)) / duration[self.state.value]) < self.RealAlarmThreshold:
+                    isStateChanged = True
+                    self.state = RunState.Exit
+                    self.index = 0
+                    del exitBuffer[:]
+            print("realTimeBuffer len:%d  sum:%d"%(len(realTimeBuffer), sum(realTimeBuffer)))
+        elif self.state == RunState.Exit:
+            self.isMakingPhone = True 
+            if self.index >= len(exitBuffer):
+                exitBuffer.append(value)
+            else:
+                exitBuffer[self.index] = value
+
+            if len(exitBuffer) == duration[self.state.value]:
+                isStateChanged = True
+                if (float(sum(exitBuffer)) / duration[self.state.value])  >= self.ExitAlarmThreshold:
+                    self.state = RunState.Real
+                    self.index = 0
+                    del realTimeBuffer[:]
+                else:
+                    self.isMakingPhone = False 
+                    self.state = RunState.Launch
+                    self.index = 0
+                    del launchBuffer[:]
+            print("exitBuffer len:%d  sum:%d"%(len(exitBuffer), sum(exitBuffer)))
+        if isStateChanged == False:
+            self.index += 1
+            self.index = self.index % duration[self.state.value]
+
+        print("current index:%d  value:%d  isMakingPhone:%d "%(self.index, value, self.isMakingPhone))
+
+        image = np.array(frame)
+        if self.isMakingPhone == True:
+            cv2.circle(frame, (image.shape[1] - 20,20), 10, (0,0,255), -1)
+        else:
+            cv2.circle(frame, (image.shape[1] - 20,20), 10, (0,255,0), -1)
+
+class RunState(Enum):
+    Launch = 0      #开始模式
+    Real = 1        #实时模式
+    Exit = 2        #退出模式
+
 def show_face_ear_area(frame, boxes_c, landmarks):
 
     # t2 = cv2.getTickCount()
@@ -395,7 +517,7 @@ def show_face_ear_area(frame, boxes_c, landmarks):
     #人脸特征点区域
     for i in range(landmarks.shape[0]):
         for j in range(len(landmarks[i])/2):
-            cv2.circle(frame, (int(landmarks[i][2*j]),int(int(landmarks[i][2*j+1]))), 2, (0,0,255))  
+            cv2.circle(frame, (int(landmarks[i][2*j] + 5),int(landmarks[i][2*j+1] + 3)), 2, (0,0,255))  
 
     #耳部区域
     for i in range(boxes_c.shape[0]):
