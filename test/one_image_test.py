@@ -26,54 +26,57 @@ dimension = 100     # this is to define how dimentions u want for PCA
 possibly = 0.0
 
 def main():
-    test_svm_classification()
-    # paths = ["test_positive", "test_negative"]
-    # count = 0
-    # fds = []
-    # labels = []
+    # test_svm_classification()
+    paths = ["sample"]
+    count = 0
+    fds = []
+    labels = []
 
-    # # MTCNN检测器
-    # mtcnn_detector = mtcnn_detector_init()    
-    # t0 = time.time()
-    # num = 0
-    # for path in paths:
-    #     for item in os.listdir(path):
-    #         if item[0] == '.':
-    #             continue
-    #         t1 = time.time()
-    #         imagepath = os.path.join(path,item)
-    #         print("%d Dealing with %s"%(num,imagepath))
+    # MTCNN检测器
+    mtcnn_detector = mtcnn_detector_init()    
+    t0 = time.time()
+    num = 0
+    for path in paths:
+        for item in os.listdir(path):
+            if item[0] == '.':
+                continue
+            t1 = time.time()
+            imagepath = os.path.join(path,item)
+            print("%d Dealing with %s"%(num,imagepath))
 
-    #         test_data = TestLoader([imagepath])
-    #         all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
-    #         if len(all_boxes[0]) == 0:
-    #             continue
+            test_data = TestLoader([imagepath])
+            all_boxes,landmarks = mtcnn_detector.detect_face(test_data)
+            if len(all_boxes[0]) == 0:
+                continue
             
-    #         t2 = time.time()
-    #         print("mtcnn_detector cost time %f"%(t2-t1))
+            t2 = time.time()
+            print("mtcnn_detector cost time %f"%(t2-t1))
             
-    #         image = cv2.imread(imagepath)
+            image = cv2.imread(imagepath)
 
-    #         img = crop_image(image, all_boxes[0][0])
-    #         #Skin Detection
-    #         # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
-    #         cv2.imwrite("resize/img_2000%d.jpg"%(num), img)
+            # img = crop_image(image, all_boxes[0][0])
+            #Skin Detection
+            # gray = skinDetect(image, all_boxes[count][0], landmarks[count][0])
             
-    #         # HOG 
-    #         # fd = hog_feature(gray)
-    #         # fds.append(fd)
-    #         # if cmp(path, "positive") == 0:
-    #         #     labels.append(1.0)
-    #         # else:
-    #         #     labels.append(0.0)
             
-    #         # t3 = time.time()
-    #         # print("one image cost time:%f"%(t3 - t1))
+            # HOG 
+            # fd = hog_feature(gray)
+            # fds.append(fd)
+            # if cmp(path, "positive") == 0:
+            #     labels.append(1.0)
+            # else:
+            #     labels.append(0.0)
+            
+            # t3 = time.time()
+            # print("one image cost time:%f"%(t3 - t1))
 
-    #         num += 1
-    #         # cv2.imshow("lala",image)
-    #         # if cv2.waitKey(0) & 0xFF == ord('q'):
-    #         #     continue
+            num += 1
+            test_show_face_area(image, all_boxes)
+            test_show_landmark_area(image, landmarks)
+            cv2.imwrite("resize/img_2000%d.jpg"%(num), image)
+            # cv2.imshow("lala",image)
+            # if cv2.waitKey(0) & 0xFF == ord('q'):
+            #     continue
 
 
     # PCA 降维 
@@ -572,7 +575,7 @@ def test_show_landmark_area(image, landmarks):
     for landmark in landmarks[0]:
         for i in range(len(landmark)/2):
             # print("Landmark:%d    %d" ,landmark[2*i] + 5 , landmark[2*i+1])
-            cv2.circle(image, (int(landmark[2*i] + 5),int(int(landmark[2*i+1]))), 3, (0,0,255))
+            cv2.circle(image, (int(landmark[2*i] + 5),int(landmark[2*i+1] + 2)), 3, (0,0,255))
 
 def test_show_ear_area(image, all_boxes):
     for bbox in all_boxes[0]:

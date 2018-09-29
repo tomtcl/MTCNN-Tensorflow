@@ -28,7 +28,7 @@ def main():
      # 打电话行为检测器
     behavior_detector = behavior_detection()
 
-    videopath = "./13025123.mp4"
+    videopath = "./IMG_1680.mp4"
     video_capture = cv2.VideoCapture(videopath)  #捕获摄像头
     video_capture.set(3, 320)
     video_capture.set(4, 480)
