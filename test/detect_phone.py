@@ -510,8 +510,8 @@ def show_face_ear_area(frame, boxes_c, landmarks):
         # if score > thresh:
         cv2.rectangle(frame, (corpbbox[0], corpbbox[1]),
                     (corpbbox[2], corpbbox[3]), (255, 0, 0), 1)
-        cv2.putText(frame, '{:.3f}'.format(score), (corpbbox[0], corpbbox[1] - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (0, 0, 255), 2)
+        cv2.putText(frame, 'face', (corpbbox[0], corpbbox[1] - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (0, 0, 255), 1)
     #帧率
     # cv2.putText(frame, '{:.4f}'.format(t) + " " + '{:.3f}'.format(fps), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
     #             (255, 0, 255), 2)
