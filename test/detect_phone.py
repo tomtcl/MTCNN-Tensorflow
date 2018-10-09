@@ -1,6 +1,7 @@
 #coding:utf-8
 import sys
-sys.path.append('/'.join(sys.path[0].split('/')[:-1]))
+# sys.path.append('/'.join(sys.path[0].split('/')[:-1]))
+sys.path.append('..')
 from Detection.MtcnnDetector import MtcnnDetector
 from Detection.detector import Detector
 from Detection.fcn_detector import FcnDetector
@@ -189,7 +190,7 @@ def hog_feature(image):
 #HOG 特征采用PCA降维
 ##################################################
 def pca_feature(features, dimension = 100):
-    print "Start to do PCA..."   
+    print("Start to do PCA...")   
  
     t1 = time.time()   
     newData,meanVal=zeroMean(features)   
@@ -206,7 +207,7 @@ def pca_feature(features, dimension = 100):
     lowDDataMat=newData*n_eigVect # calculate low dimention data
      
     t2 = time.time()   
-    print "PCA takes %f seconds" %(t2-t1)   
+    print("PCA takes %f seconds" %(t2-t1))   
     
     return lowDDataMat 
 
@@ -218,15 +219,15 @@ def svm_classification(features, labels):
 
     model_path = './models/%s/svm_%s_pca_%s.model' %(m,m,dimension)
     clf = ssv.SVC(kernel='linear')   
-    print "Training a SVM Classifier."   
+    print("Training a SVM Classifier.")  
     print("fds type: %s  shape:%s"%(type(features), features.shape))
     # print("lable type: %s  shape:%s"%(type(labels), labels.shape))
     clf.fit(features, labels)   
     joblib.dump(clf, model_path)  
   
     t1 = time.time()   
-    print "Classifier saved to {}".format(model_path)   
-    print 'The cast of time is :%f seconds' % (t1-t0) 
+    print("Classifier saved to {}".format(model_path))
+    print('The cast of time is :%f seconds' % (t1-t0))
 
 
 def zeroMean(dataMat): # zero normalisation
@@ -290,7 +291,7 @@ def find_gaussion_probability_threshold(pdfs):
     right = len(pdfs) - 1
     left = 0
     while left <= right:
-        mid = (right + left) / 2
+        mid = int((right + left) / 2)
         rate = float(len(pdfs[pdfs >= pdfs[mid]])) / length
         if rate >= 0.7 and rate <= 0.71:
             break
@@ -516,7 +517,7 @@ def show_face_ear_area(frame, boxes_c, landmarks):
     #             (255, 0, 255), 2)
     #人脸特征点区域
     for i in range(landmarks.shape[0]):
-        for j in range(len(landmarks[i])/2):
+        for j in range(int(len(landmarks[i])/2)):
             cv2.circle(frame, (int(landmarks[i][2*j] + 5),int(landmarks[i][2*j+1] + 3)), 2, (0,0,255))  
 
     #耳部区域

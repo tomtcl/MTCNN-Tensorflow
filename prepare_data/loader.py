@@ -1,8 +1,8 @@
 import numpy as np
-import minibatch
 import sys
 import cv2
-sys.path.append("../")
+sys.path.append('../prepare_data')
+import minibatch
 from train_models.MTCNN_config import config
 
 
